@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/myselfBZ/redis-clone/internal/resp"
+	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
 var commandHandlers = map[resp.CommandType]Handler{}

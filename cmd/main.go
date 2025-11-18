@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/myselfBZ/redis-clone/internal/resp"
-	"github.com/myselfBZ/redis-clone/internal/store"
+	"github.com/myselfBZ/go-redis-clone/internal/resp"
+	"github.com/myselfBZ/go-redis-clone/internal/store"
 )
 
 type server struct {

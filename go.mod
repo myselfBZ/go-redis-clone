@@ -1,4 +1,4 @@
-module github.com/myselfBZ/redis-clone
+module github.com/myselfBZ/go-redis-clone
 
 go 1.25.1
 

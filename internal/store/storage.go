@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/myselfBZ/redis-clone/internal/resp"
+	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
 
