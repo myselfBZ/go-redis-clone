@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
@@ -53,6 +54,25 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 
 func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) error {
 	return resp.WriteOK(conn)
+}
+
+func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
+	slog.Info("i am here")
+	found := 0
+	for _, arg := range args[1:] {
+		keyBulkStr, ok := arg.(*resp.BulkStr)
+		if !ok {
+			continue
+		}
+		slog.Info("Delete operation..")
+		err := s.storage.Del(keyBulkStr.Data)
+		if err == nil {
+			found += 1
+		}
+		slog.Info("hell is there ")
+	}
+	slog.Info("loop is over")
+	return resp.WriteBulkStr(conn, fmt.Sprintf("(integer) %d", found))
 }
 
 

@@ -41,3 +41,14 @@ func (s *Storage) Get(key string) (resp.RespType ,error) {
 
 	return data, nil
 }
+
+func (s *Storage) Del(key string) error {
+	defer s.mu.Unlock()
+	s.mu.Lock()
+	_, ok := s.data[key]
+	if !ok {
+		return ErrNotFound
+	}
+	delete(s.data, key)
+	return nil
+}

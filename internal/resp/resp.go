@@ -22,7 +22,7 @@ type CommandType string
 
 const (
 	SET          CommandType = "SET"
-	DEL          CommandType = "DELETE"
+	DEL          CommandType = "DEL"
 	GET          CommandType = "GET"
 	COMMAND_DOCS CommandType = "COMMAND"
 )

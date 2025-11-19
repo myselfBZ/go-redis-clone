@@ -71,10 +71,6 @@ func (s *server) handle(conn net.Conn) error {
 
 		case *resp.BulkStr:
 
-			if resp.SET == resp.CommandType(c.Data) {
-				slog.Info("They are equal")
-			}
-
 			handler, ok := commandHandlers[resp.CommandType(c.Data)]
 			if !ok {
 				resp.WriteError(conn, "invalid command")
@@ -99,8 +95,9 @@ func main() {
 	storage := store.NewStorage()
 	server := newServer(storage)
 
-	commandHandlers[resp.CommandType("SET")] = server.handleSet
-	commandHandlers[resp.CommandType("GET")] = server.handleGet
+	commandHandlers[resp.SET] = server.handleSet
+	commandHandlers[resp.GET] = server.handleGet
+	commandHandlers[resp.DEL] = server.handleDel
 	commandHandlers[resp.COMMAND_DOCS] = server.handleCommandDocs
 
 	slog.Info("server started...")
