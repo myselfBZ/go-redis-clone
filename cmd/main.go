@@ -35,6 +35,7 @@ func (s *server) run() error {
 	}
 
 	s.ln = ln
+	go s.storage.StartJanitor()
 	return s.accept()
 }
 

@@ -72,6 +72,3 @@ func TestParseCommand(t *testing.T) {
 	command, err = CommandFromReader(reader)
 	require.Error(t, err)
 }
-
-
-
