@@ -38,3 +38,9 @@ func WriteRespType(conn io.Writer, val RespType) error {
 	}
 }
 
+func WriteInt(conn io.Writer, i int) error {
+	str := fmt.Sprintf(":%d\r\n", i)
+	_, err := conn.Write([]byte(str))
+	return err
+}
+

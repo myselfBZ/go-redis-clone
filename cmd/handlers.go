@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -93,27 +92,32 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 }
 
 
+func (s *server) handleTTL(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 2  {
+		return resp.WriteError(conn, "invalid syntax")
+	}
+
+	result := s.storage.TTL(args[1].(*resp.BulkStr).Data)
+	return resp.WriteInt(conn, result)
+}
+
 func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) error {
 	return resp.WriteOK(conn)
 }
 
 func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
-	slog.Info("i am here")
 	found := 0
 	for _, arg := range args[1:] {
 		keyBulkStr, ok := arg.(*resp.BulkStr)
 		if !ok {
 			continue
 		}
-		slog.Info("Delete operation..")
 		err := s.storage.Del(keyBulkStr.Data)
 		if err == nil {
 			found += 1
 		}
-		slog.Info("hell is there ")
 	}
-	slog.Info("loop is over")
-	return resp.WriteBulkStr(conn, fmt.Sprintf("(integer) %d", found))
+	return resp.WriteInt(conn, found)
 }
 
 

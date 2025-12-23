@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
@@ -61,7 +62,6 @@ func (s *server) handle(conn net.Conn) error {
 			continue
 		}
 
-		slog.Info("recieved a new command", "data", command.ArgsString())
 		args := command.Args()
 
 		// if len(args) <= 2 {
@@ -72,7 +72,7 @@ func (s *server) handle(conn net.Conn) error {
 
 		case *resp.BulkStr:
 
-			handler, ok := commandHandlers[resp.CommandType(c.Data)]
+			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.Data))]
 			if !ok {
 				resp.WriteError(conn, "invalid command")
 				break
@@ -87,7 +87,7 @@ func (s *server) handle(conn net.Conn) error {
 			}
 
 		default:
-			resp.WriteBulkStr(conn, "invalid data type")
+			resp.WriteBulkStr(conn, "invalid protocol")
 		}
 	}
 }
@@ -100,6 +100,7 @@ func main() {
 	commandHandlers[resp.GET] = server.handleGet
 	commandHandlers[resp.DEL] = server.handleDel
 	commandHandlers[resp.COMMAND_DOCS] = server.handleCommandDocs
+	commandHandlers[resp.TTL] = server.handleTTL
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {

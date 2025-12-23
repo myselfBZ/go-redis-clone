@@ -21,6 +21,7 @@ var (
 type CommandType string
 
 const (
+	TTL			 CommandType = "TTL" 
 	SET          CommandType = "SET"
 	DEL          CommandType = "DEL"
 	GET          CommandType = "GET"

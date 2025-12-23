@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -46,7 +47,7 @@ func (j *janitor) run(s *Storage) {
 	for {
 		select {
 		case <-ticker.C:
-			s.DeleteExpired()
+			s.deleteExpired()
 		case <-j.exit:
 			return
 		}
@@ -66,7 +67,26 @@ func (s *Storage) StartJanitor() {
 	s.janitor.run(s)
 }
 
-func (s *Storage) DeleteExpired() {
+func (s *Storage) TTL(key string) int {
+	s.mu.RLock()
+	expiresAt, hasExpire := s.expiringKeys[key]
+	_, existsInCache := s.data[key]
+	s.mu.RUnlock()
+
+	if !hasExpire && existsInCache{
+		return -1
+	}
+
+	now := time.Now()
+
+	if now.After(expiresAt) {
+		return -2
+	}
+	ttl := int(math.Round(time.Until(expiresAt).Seconds()))
+	return ttl
+}
+
+func (s *Storage) deleteExpired() {
 	expiredKeys := []string{}
 	s.mu.Lock() 
 	for k, expiresAt := range s.expiringKeys {
@@ -145,5 +165,6 @@ func (s *Storage) Del(key string) error {
 		return ErrNotFound
 	}
 	delete(s.data, key)
+	delete(s.expiringKeys, key)
 	return nil
 }
