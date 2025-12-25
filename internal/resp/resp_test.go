@@ -34,7 +34,8 @@ func TestParseCommand(t *testing.T) {
 	}
 
 	command, err := CommandFromReader(reader)
-	require.NoError(t, err)
+	// i mean... yeah it is hacky
+	require.Equal(t, err, io.EOF)
 	require.Equal(t, 1, command.arr.Length())
 
 

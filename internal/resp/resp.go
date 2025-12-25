@@ -21,10 +21,15 @@ var (
 type CommandType string
 
 const (
+	EXPIRE 		 CommandType = "EXPIRE"
 	TTL			 CommandType = "TTL" 
+	PTTL 		 CommandType = "PTTL"
 	SET          CommandType = "SET"
 	DEL          CommandType = "DEL"
 	GET          CommandType = "GET"
+	PERSIST 	 CommandType = "PERSIST"
+
+	// this is bullshit
 	COMMAND_DOCS CommandType = "COMMAND"
 )
 
@@ -120,7 +125,7 @@ func CommandFromReader(reader io.Reader) (*Command, error) {
 		n, err := reader.Read(buff[buffLen:])
 		if err != nil {
 			if err == io.EOF {
-				return command, err
+				return command, err 
 			}
 		}
 

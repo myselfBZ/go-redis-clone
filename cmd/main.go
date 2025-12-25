@@ -63,11 +63,6 @@ func (s *server) handle(conn net.Conn) error {
 		}
 
 		args := command.Args()
-
-		// if len(args) <= 2 {
-		// 	return resp.WriteBulkStr(conn, "delayed response")
-		// }
-
 		switch c := args[0].(type) {
 
 		case *resp.BulkStr:
@@ -101,6 +96,9 @@ func main() {
 	commandHandlers[resp.DEL] = server.handleDel
 	commandHandlers[resp.COMMAND_DOCS] = server.handleCommandDocs
 	commandHandlers[resp.TTL] = server.handleTTL
+	commandHandlers[resp.EXPIRE] = server.handleExpire
+	commandHandlers[resp.PTTL] = server.handlePTTL
+	commandHandlers[resp.PERSIST] = server.handlePersist
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {

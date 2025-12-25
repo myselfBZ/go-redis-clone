@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -17,7 +16,7 @@ type Handler func(net.Conn, []resp.RespType) error
 
 func (s *server) handleGet(conn net.Conn, args []resp.RespType) error {
 	if len(args) != 2 {
-		return resp.WriteError(conn, "invalid number of args to GET. Expected 1 got "+ fmt.Sprintf("%d", len(args)))
+		return resp.WriteError(conn, "wrong number of args to 'get' ")
 	}
 
 	key, ok := args[1].(*resp.BulkStr)
@@ -64,6 +63,10 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 				return resp.WriteError(conn, "invalid syntax")
 			}
 
+			if seconds <= 0 {
+				seconds = -1
+			}
+
 			setArgs.EX = seconds
 			i++
 		case "PX":
@@ -71,21 +74,37 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 				return resp.WriteError(conn, "invalid syntax")
 			}
 
-			seconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).Data)
+			milliseconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).Data)
 
 			if err != nil {
 				return resp.WriteError(conn, "invalid syntax")
 			}
 
-			setArgs.PX = seconds
+			if milliseconds <= 0 {
+				milliseconds = -1
+			}
+
+			setArgs.PX = milliseconds 
 			i++
 		default:
 			return resp.WriteError(conn, "invalid options")
 		}
 	}
 
-	if err := s.storage.Set(setArgs); err != nil {
-		return resp.WriteError(conn, err.Error())
+	if setArgs.EX > 0 && setArgs.PX > 0 {
+		return resp.WriteError(conn, "EX and PX options at the same time are not compatible")
+	}
+
+	if setArgs.EX < 0 || setArgs.PX < 0 {
+		return resp.WriteError(conn, "invalid expire time in 'set' command")
+	}
+
+	if setArgs.XX && setArgs.NX {
+		return resp.WriteError(conn, "XX and NX options at the same time are not compatible")
+	}
+
+	if written := s.storage.Set(setArgs); !written {
+		return resp.WriteNil(conn)
 	}
 
 	return resp.WriteOK(conn)
@@ -98,6 +117,15 @@ func (s *server) handleTTL(conn net.Conn, args []resp.RespType) error {
 	}
 
 	result := s.storage.TTL(args[1].(*resp.BulkStr).Data)
+	return resp.WriteInt(conn, result)
+}
+
+func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 2  {
+		return resp.WriteError(conn, "invalid syntax")
+	}
+
+	result := s.storage.PTTL(args[1].(*resp.BulkStr).Data)
 	return resp.WriteInt(conn, result)
 }
 
@@ -120,4 +148,55 @@ func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
 	return resp.WriteInt(conn, found)
 }
 
+func (s *server) handleExpire(conn net.Conn, args []resp.RespType) error {
+	if len(args) < 3 {
+		return resp.WriteError(conn, "invalid syntax")
+	}
 
+	seconds, err := strconv.Atoi(args[2].(*resp.BulkStr).Data)
+
+	if err != nil {
+		return resp.WriteError(conn, "value is not an integer or out of range")
+	}
+	expireArgs  := store.ExpireArgs{
+		Key: args[1].(*resp.BulkStr).Data,
+		Seconds: seconds,
+	}
+
+	for i := 3; i < len(args); i++ {
+		bulkStr := args[i].(*resp.BulkStr)
+
+		switch strings.ToUpper(bulkStr.Data) {
+		case "XX":
+			expireArgs.XX = true
+		case "NX":
+			expireArgs.NX = true
+		default:
+			return resp.WriteError(conn, "invalid options")
+		}
+	}
+
+	if expireArgs.XX && expireArgs.NX {
+		return resp.WriteError(conn, "EX and PX can't have non-zero value at a time")
+	}
+
+	if written := s.storage.Expire(expireArgs); !written {
+		return resp.WriteInt(conn, 0)
+	}
+
+	return resp.WriteInt(conn, 1)
+}
+
+func (s *server) handlePersist(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 2 {
+		return resp.WriteError(conn, "wrong number of arguments for 'persist' command")
+	}
+
+	written := s.storage.Persist(args[1].(*resp.BulkStr).Data)
+
+	if !written {
+		return resp.WriteInt(conn, 0)
+	}
+
+	return resp.WriteInt(conn, 1)
+}
