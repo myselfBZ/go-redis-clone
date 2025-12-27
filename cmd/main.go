@@ -99,6 +99,10 @@ func main() {
 	commandHandlers[resp.EXPIRE] = server.handleExpire
 	commandHandlers[resp.PTTL] = server.handlePTTL
 	commandHandlers[resp.PERSIST] = server.handlePersist
+	commandHandlers[resp.INCR] = server.handleIncr
+	commandHandlers[resp.DECR] = server.handleDecr
+	commandHandlers[resp.INCRBY] = server.handleIncrBy
+	commandHandlers[resp.PING] = server.handlePing
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {

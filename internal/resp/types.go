@@ -12,7 +12,6 @@ type RespType interface{
 
 type RespArray struct {
 	elements []RespType
-	length int
 }
 
 func (rt *RespArray) Append(e RespType) {
@@ -20,7 +19,7 @@ func (rt *RespArray) Append(e RespType) {
 }
 
 func (rt *RespArray) Length() int {
-	return rt.length
+	return len(rt.elements)
 }
 
 func (rt *RespArray) Type() string {
@@ -33,5 +32,13 @@ type BulkStr struct {
 
 func (rt *BulkStr) Type() string {
 	return "bulkstr"
+}
+
+type Intiger struct {
+	Data int
+}
+
+func (rt *Intiger) Type() string {
+	return "intiger"
 }
 

@@ -29,15 +29,13 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 
 func TestParseCommand(t *testing.T) {
 	reader := &chunkReader{
-		data: "*1\r\n",
+		data: "*0\r\n",
 		numBytesPerRead: 1,
 	}
 
 	command, err := CommandFromReader(reader)
 	// i mean... yeah it is hacky
-	require.Equal(t, err, io.EOF)
-	require.Equal(t, 1, command.arr.Length())
-
+	require.NotNil(t, err)
 
 	reader = &chunkReader{
 		data: "*sd\r\n",

@@ -14,6 +14,10 @@ var commandHandlers = map[resp.CommandType]Handler{}
 type Handler func(net.Conn, []resp.RespType) error
 
 
+func (s *server) handlePing(conn net.Conn, args []resp.RespType) error {
+	return resp.WritePong(conn)
+}
+
 func (s *server) handleGet(conn net.Conn, args []resp.RespType) error {
 	if len(args) != 2 {
 		return resp.WriteError(conn, "wrong number of args to 'get' ")
@@ -40,8 +44,20 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 
 	setArgs := store.SetArgs{
 		Key: key.(*resp.BulkStr).Data,
-		Value: value,
 	}
+
+	// might be an integer
+	parsedValue := value.(*resp.BulkStr)
+	intVal, err := strconv.Atoi(parsedValue.Data)
+	
+	if err != nil {
+		setArgs.Value = value
+	} else {
+		setArgs.Value = &resp.Intiger{
+			Data: intVal,
+		}
+	}
+
 
 	for i := 3; i < len(args); i++ {
 		bulkStr := args[i].(*resp.BulkStr)
@@ -199,4 +215,52 @@ func (s *server) handlePersist(conn net.Conn, args []resp.RespType) error {
 	}
 
 	return resp.WriteInt(conn, 1)
+}
+
+func (s *server) handleDecr(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 2 {
+		return resp.WriteError(conn, "wrong number of arguments for 'decr' command")
+	}
+
+	key := args[1].(*resp.BulkStr)
+
+	val, err := s.storage.Decr(key.Data)
+	if err != nil {
+		return resp.WriteError(conn, "value is not an integer or out of range")
+	}
+	return resp.WriteInt(conn, val)
+}
+
+func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 3 {
+		return resp.WriteError(conn, "wrong number of arguments for 'incrby' command")
+	}
+
+	key := args[1].(*resp.BulkStr)
+	incrBy := args[2].(*resp.BulkStr)
+	integer, err := strconv.Atoi(incrBy.Data)
+
+	if err != nil {
+		return resp.WriteError(conn, "value is not an integer or out of range")
+	}
+
+	val, err := s.storage.IncrBy(key.Data, integer)
+	if err != nil {
+		return resp.WriteError(conn, "value is not an integer or out of range")
+	}
+	return resp.WriteInt(conn, val)
+}
+
+func (s *server) handleIncr(conn net.Conn, args []resp.RespType) error {
+	if len(args) != 2 {
+		return resp.WriteError(conn, "wrong number of arguments for 'incr' command")
+	}
+
+	key := args[1].(*resp.BulkStr)
+
+	val, err := s.storage.Incr(key.Data)
+	if err != nil {
+		return resp.WriteError(conn, "value is not an integer or out of range")
+	}
+	return resp.WriteInt(conn, val)
 }

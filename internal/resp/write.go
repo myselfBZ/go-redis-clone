@@ -29,10 +29,17 @@ func WriteOK(conn io.Writer) error {
 	return err
 }
 
+func WritePong(conn io.Writer) error {
+	_, err := conn.Write([]byte("+PONG\r\n"))
+	return err
+}
+
 func WriteRespType(conn io.Writer, val RespType) error {
 	switch s := val.(type) {
 	case *BulkStr:
 		return WriteBulkStr(conn, s.Data)
+	case *Intiger:
+		return WriteInt(conn, s.Data)
 	default:
 		return errors.ErrUnsupported
 	}

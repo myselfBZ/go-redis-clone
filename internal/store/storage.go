@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("key not found")
+	ErrNotFound  = errors.New("key not found")
+	ErrNotInteger = errors.New("value is not an intiger")
 )
 
 func NewStorage() *Storage {
@@ -79,16 +80,18 @@ func (s *Storage) PTTL(key string) int {
 	_, existsInCache := s.data[key]
 	s.mu.RUnlock()
 
+	if !hasExpire && !existsInCache {
+		return -2
+	}	
+
 	if !hasExpire && existsInCache {
 		return -1
 	}
 
-	now := time.Now()
-
-	if now.After(expiresAt) {
+	if s.deleteIfExpired(key) {
 		return -2
 	}
-	ttl := int(math.Round(float64( time.Until(expiresAt).Milliseconds() )))
+	ttl := int(math.Round(float64(time.Until(expiresAt).Milliseconds())))
 	return ttl
 
 }
@@ -99,18 +102,81 @@ func (s *Storage) TTL(key string) int {
 	_, existsInCache := s.data[key]
 	s.mu.RUnlock()
 
+	if !hasExpire && !existsInCache {
+		return -2
+	}
+
 	if !hasExpire && existsInCache {
 		return -1
 	}
 
-	now := time.Now()
-
-	if now.After(expiresAt) {
+	if s.deleteIfExpired(key) {
 		return -2
 	}
 	ttl := int(math.Round(time.Until(expiresAt).Seconds()))
 	return ttl
 }
+
+func (s *Storage) Decr(key string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val, exists := s.data[key]
+	if !exists || s.deleteIfExpired(key) {
+		s.data[key] = &resp.Intiger{
+			Data: -1,
+		}
+		return -1, nil
+	}
+
+	if val.Type() != "intiger" {
+		return 0, ErrNotInteger 
+	}
+
+	intType := val.(*resp.Intiger)
+	intType.Data--
+	return intType.Data, nil
+}
+
+func (s *Storage) IncrBy(key string, by int) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val, exists := s.data[key]
+	if !exists || s.deleteIfExpired(key) {
+		s.data[key] = &resp.Intiger{
+			Data: by,
+		}
+		return by, nil
+	}
+
+	if val.Type() != "intiger" {
+		return 0, ErrNotInteger 
+	}
+
+	intType := val.(*resp.Intiger)
+	intType.Data += by
+	return intType.Data, nil
+}
+
+func (s *Storage) Incr(key string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	val, exists := s.data[key]
+	if !exists || s.deleteIfExpired(key) {
+		s.data[key] = &resp.Intiger{
+			Data: 1,
+		}
+		return 1, nil
+	}
+
+	if val.Type() != "intiger" {
+		return 0, ErrNotInteger 
+	}
+
+	intType := val.(*resp.Intiger)
+	intType.Data++
+	return intType.Data, nil
+}
+
 
 func (s *Storage) deleteExpired() {
 	expiredKeys := []string{}
@@ -137,11 +203,14 @@ func (s *Storage) Expire(args ExpireArgs) bool {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	oldExpiry, existsInExpiry := s.expiringKeys[args.Key]
+	_, hasExpiry := s.expiringKeys[args.Key]
 	_, exists := s.data[args.Key]
 
-	if (existsInExpiry && now.After(oldExpiry)){
-		s.deleteKey(args.Key)
+	if !exists {
+		return false
+	}
+
+	if hasExpiry && s.deleteIfExpired(args.Key) {
 		return false
 	}
 
@@ -150,7 +219,7 @@ func (s *Storage) Expire(args ExpireArgs) bool {
 		return exists
 	}
 
-	if existsInExpiry && args.NX {
+	if hasExpiry && args.NX {
 		return false
 	}
 
@@ -159,13 +228,12 @@ func (s *Storage) Expire(args ExpireArgs) bool {
 		return true
 	}
 
-	if args.XX && exists {
+	if args.XX && exists && hasExpiry {
 		s.expiringKeys[args.Key] = expiresAt
 		return true
 	}
-	
 
-	if args.NX && !existsInExpiry && exists {
+	if args.NX && !hasExpiry && exists {
 		s.expiringKeys[args.Key] = expiresAt
 		return true
 	}
@@ -178,6 +246,7 @@ func (s *Storage) Set(args SetArgs) bool {
 
 	s.mu.Lock()
 	_, ok := s.data[args.Key]
+	_, hasExpiration := s.expiringKeys[args.Key]
 
 	if (ok && args.XX) || (!ok && args.NX) || (!args.XX && !args.NX) {
 		s.data[args.Key] = args.Value
@@ -192,6 +261,10 @@ func (s *Storage) Set(args SetArgs) bool {
 			s.expiringKeys[args.Key] = expiresAt
 		}
 
+		if args.PX == 0 && args.EX == 0 && hasExpiration{
+			delete(s.expiringKeys, args.Key)
+		}
+
 		written = true
 	}
 	s.mu.Unlock()
@@ -200,13 +273,9 @@ func (s *Storage) Set(args SetArgs) bool {
 
 func (s *Storage) Get(key string) (resp.RespType, error) {
 	s.mu.Lock()
-	expiresAt, ok := s.expiringKeys[key]
-	if ok {
-		if time.Now().After(expiresAt) {
-			s.deleteKey(key)
-			s.mu.Unlock()
-			return nil, ErrNotFound
-		}
+	if s.deleteIfExpired(key) {
+		s.mu.Unlock()
+		return nil, ErrNotFound
 	}
 	data, ok := s.data[key]
 	s.mu.Unlock()
@@ -229,19 +298,19 @@ func (s *Storage) Del(key string) error {
 	return nil
 }
 
+
 func (s *Storage) Persist(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, exists := s.data[key]
-	expiresAt, hasTTL := s.expiringKeys[key]
+	_, hasTTL := s.expiringKeys[key]
 
-	if !exists || !hasTTL{
+	if !exists || !hasTTL {
 		return false
 	}
 
 	// already expired
-	if hasTTL && time.Now().After(expiresAt) {
-		s.deleteKey(key)
+	if hasTTL && s.deleteIfExpired(key){
 		return false
 	}
 
@@ -253,4 +322,20 @@ func (s *Storage) Persist(key string) bool {
 func (s *Storage) deleteKey(key string) {
 	delete(s.data, key)
 	delete(s.expiringKeys, key)
+}
+
+// under lock only
+func (s *Storage) deleteIfExpired(key string) bool {
+	expiresAt, ok := s.expiringKeys[key]
+
+	if !ok {
+		return false
+	}
+
+	if time.Now().After(expiresAt) {
+		delete(s.data, key)
+		delete(s.expiringKeys, key)
+		return true
+	}
+	return false
 }
