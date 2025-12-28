@@ -10,6 +10,10 @@ A lightweight, in-memory Redis-clone key-value storage written in Go. Supports a
   - `TTL` – get remaining TTL in seconds
   - `PTTL` – get remaining TTL in milliseconds
   - `PERSIST` – remove TTL from a key
+  - `INCR` – atomically increment an integer value
+  - `DECR` – atomically decrement an integer value
+  - `INCRBY` – atomically increment an integer value by a given amount
+  - `PING` – server liveness check
 
 - **TTL Handling**
   - Supports EX (seconds) and PX (milliseconds)
