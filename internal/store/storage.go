@@ -5,8 +5,6 @@ import (
 	"math"
 	"sync"
 	"time"
-
-	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
 var (
@@ -17,7 +15,7 @@ var (
 func NewStorage() *Storage {
 	return &Storage{
 		mu:   sync.RWMutex{},
-		data: make(map[string]resp.RespType),
+		data: make(map[string]Value),
 		janitor: &janitor{
 			interval: time.Minute,
 			exit:     make(chan struct{}),
@@ -28,7 +26,7 @@ func NewStorage() *Storage {
 
 type SetArgs struct {
 	Key   string
-	Value resp.RespType
+	Value Value
 
 	PX int // ms
 	EX int // seconds
@@ -64,7 +62,7 @@ func (j *janitor) run(s *Storage) {
 
 type Storage struct {
 	mu      sync.RWMutex
-	data    map[string]resp.RespType
+	data    map[string]Value
 	janitor *janitor
 
 	expiringKeys map[string]time.Time
@@ -122,17 +120,17 @@ func (s *Storage) Decr(key string) (int, error) {
 	defer s.mu.Unlock()
 	val, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &resp.Intiger{
+		s.data[key] = &IntValue{
 			Data: -1,
 		}
 		return -1, nil
 	}
 
-	if val.Type() != "intiger" {
+	if val.StorageValueType() != "intiger" {
 		return 0, ErrNotInteger 
 	}
 
-	intType := val.(*resp.Intiger)
+	intType := val.(*IntValue)
 	intType.Data--
 	return intType.Data, nil
 }
@@ -142,17 +140,17 @@ func (s *Storage) IncrBy(key string, by int) (int, error) {
 	defer s.mu.Unlock()
 	val, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &resp.Intiger{
+		s.data[key] = &IntValue{
 			Data: by,
 		}
 		return by, nil
 	}
 
-	if val.Type() != "intiger" {
+	if val.StorageValueType() != "intiger" {
 		return 0, ErrNotInteger 
 	}
 
-	intType := val.(*resp.Intiger)
+	intType := val.(*IntValue)
 	intType.Data += by
 	return intType.Data, nil
 }
@@ -162,17 +160,17 @@ func (s *Storage) Incr(key string) (int, error) {
 	defer s.mu.Unlock()
 	val, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &resp.Intiger{
+		s.data[key] = &IntValue{
 			Data: 1,
 		}
 		return 1, nil
 	}
 
-	if val.Type() != "intiger" {
+	if val.StorageValueType() != "intiger" {
 		return 0, ErrNotInteger 
 	}
 
-	intType := val.(*resp.Intiger)
+	intType := val.(*IntValue)
 	intType.Data++
 	return intType.Data, nil
 }
@@ -271,7 +269,7 @@ func (s *Storage) Set(args SetArgs) bool {
 	return written
 }
 
-func (s *Storage) Get(key string) (resp.RespType, error) {
+func (s *Storage) Get(key string) (Value, error) {
 	s.mu.Lock()
 	if s.deleteIfExpired(key) {
 		s.mu.Unlock()

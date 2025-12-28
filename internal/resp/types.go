@@ -27,11 +27,15 @@ func (rt *RespArray) Type() string {
 }
 
 type BulkStr struct {
-	Data string
+	Data []byte
 }
 
 func (rt *BulkStr) Type() string {
 	return "bulkstr"
+}
+
+func (rt *BulkStr) String() string {
+	return string(rt.Data)
 }
 
 type Intiger struct {

@@ -4,6 +4,7 @@ import(
 	"io"
 	"fmt"
 	"errors"
+	"strconv"
 )
 
 func WriteError(conn io.Writer, msg string) error {
@@ -12,10 +13,26 @@ func WriteError(conn io.Writer, msg string) error {
 	return err
 } 
 
-func WriteBulkStr(conn io.Writer, s string) error {
-	msg := fmt.Sprintf("$%d\r\n%s\r\n", len(s), s)
-	_, err := conn.Write([]byte(msg))
-	return err
+func WriteBulkStr(conn io.Writer, s []byte) error {
+    if _, err := conn.Write([]byte("$")); err != nil {
+        return err
+    }
+    if _, err := conn.Write([]byte(strconv.Itoa(len(s)))); err != nil {
+        return err
+    }
+    if _, err := conn.Write([]byte("\r\n")); err != nil {
+        return err
+    }
+
+    if _, err := conn.Write(s); err != nil {
+        return err
+    }
+
+    if _, err := conn.Write([]byte("\r\n")); err != nil {
+        return err
+    }
+
+    return nil
 }
 
 

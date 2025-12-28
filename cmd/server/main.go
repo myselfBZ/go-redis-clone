@@ -58,7 +58,7 @@ func (s *server) handle(conn net.Conn) error {
 				return nil
 			}
 
-			resp.WriteBulkStr(conn, err.Error())
+			resp.WriteBulkStr(conn, []byte(err.Error()))
 			continue
 		}
 
@@ -67,7 +67,7 @@ func (s *server) handle(conn net.Conn) error {
 
 		case *resp.BulkStr:
 
-			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.Data))]
+			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.String()))]
 			if !ok {
 				resp.WriteError(conn, "invalid command")
 				break
@@ -82,7 +82,7 @@ func (s *server) handle(conn net.Conn) error {
 			}
 
 		default:
-			resp.WriteBulkStr(conn, "invalid protocol")
+			resp.WriteError(conn, "invalid protocol")
 		}
 	}
 }
@@ -103,6 +103,7 @@ func main() {
 	commandHandlers[resp.DECR] = server.handleDecr
 	commandHandlers[resp.INCRBY] = server.handleIncrBy
 	commandHandlers[resp.PING] = server.handlePing
+
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {

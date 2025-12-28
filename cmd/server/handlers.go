@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net"
 	"strconv"
 	"strings"
@@ -8,6 +9,8 @@ import (
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
 )
+
+var ErrUnknownStoreType = errors.New("unknown storage level type")
 
 var commandHandlers = map[resp.CommandType]Handler{}
 
@@ -29,11 +32,17 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteError(conn, "keys must be bulk strings")
 	}
 
-	val, err := s.storage.Get(key.Data)
+	val, err := s.storage.Get(key.String())
 	if err != nil {
 		return resp.WriteNil(conn)
 	}
-	return resp.WriteRespType(conn, val)
+	respVal, err := fromStoreToResp(val)
+
+	if err != nil {
+		return resp.WriteError(conn, "server encountered a problem")
+	}
+
+	return resp.WriteRespType(conn, respVal)
 }
 
 func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
@@ -43,17 +52,19 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 	key, value := args[1], args[2]
 
 	setArgs := store.SetArgs{
-		Key: key.(*resp.BulkStr).Data,
+		Key: key.(*resp.BulkStr).String(),
 	}
 
 	// might be an integer
 	parsedValue := value.(*resp.BulkStr)
-	intVal, err := strconv.Atoi(parsedValue.Data)
+	intVal, err := strconv.Atoi(parsedValue.String())
 	
 	if err != nil {
-		setArgs.Value = value
+		setArgs.Value = &store.StringValue{
+			Data: parsedValue.Data,
+		}
 	} else {
-		setArgs.Value = &resp.Intiger{
+		setArgs.Value = &store.IntValue{
 			Data: intVal,
 		}
 	}
@@ -62,7 +73,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 	for i := 3; i < len(args); i++ {
 		bulkStr := args[i].(*resp.BulkStr)
 
-		switch strings.ToUpper(bulkStr.Data) {
+		switch strings.ToUpper(bulkStr.String()) {
 		case "XX":
 			setArgs.XX = true
 		case "NX":
@@ -73,7 +84,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 				return resp.WriteError(conn, "invalid syntax")
 			}
 
-			seconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).Data)
+			seconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).String())
 
 			if err != nil {
 				return resp.WriteError(conn, "invalid syntax")
@@ -90,7 +101,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 				return resp.WriteError(conn, "invalid syntax")
 			}
 
-			milliseconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).Data)
+			milliseconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).String())
 
 			if err != nil {
 				return resp.WriteError(conn, "invalid syntax")
@@ -132,7 +143,7 @@ func (s *server) handleTTL(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteError(conn, "invalid syntax")
 	}
 
-	result := s.storage.TTL(args[1].(*resp.BulkStr).Data)
+	result := s.storage.TTL(args[1].(*resp.BulkStr).String())
 	return resp.WriteInt(conn, result)
 }
 
@@ -141,7 +152,7 @@ func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteError(conn, "invalid syntax")
 	}
 
-	result := s.storage.PTTL(args[1].(*resp.BulkStr).Data)
+	result := s.storage.PTTL(args[1].(*resp.BulkStr).String())
 	return resp.WriteInt(conn, result)
 }
 
@@ -156,7 +167,7 @@ func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
 		if !ok {
 			continue
 		}
-		err := s.storage.Del(keyBulkStr.Data)
+		err := s.storage.Del(keyBulkStr.String())
 		if err == nil {
 			found += 1
 		}
@@ -169,20 +180,20 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteError(conn, "invalid syntax")
 	}
 
-	seconds, err := strconv.Atoi(args[2].(*resp.BulkStr).Data)
+	seconds, err := strconv.Atoi(args[2].(*resp.BulkStr).String())
 
 	if err != nil {
 		return resp.WriteError(conn, "value is not an integer or out of range")
 	}
 	expireArgs  := store.ExpireArgs{
-		Key: args[1].(*resp.BulkStr).Data,
+		Key: args[1].(*resp.BulkStr).String(),
 		Seconds: seconds,
 	}
 
 	for i := 3; i < len(args); i++ {
 		bulkStr := args[i].(*resp.BulkStr)
 
-		switch strings.ToUpper(bulkStr.Data) {
+		switch strings.ToUpper(bulkStr.String()) {
 		case "XX":
 			expireArgs.XX = true
 		case "NX":
@@ -208,7 +219,7 @@ func (s *server) handlePersist(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteError(conn, "wrong number of arguments for 'persist' command")
 	}
 
-	written := s.storage.Persist(args[1].(*resp.BulkStr).Data)
+	written := s.storage.Persist(args[1].(*resp.BulkStr).String())
 
 	if !written {
 		return resp.WriteInt(conn, 0)
@@ -224,7 +235,7 @@ func (s *server) handleDecr(conn net.Conn, args []resp.RespType) error {
 
 	key := args[1].(*resp.BulkStr)
 
-	val, err := s.storage.Decr(key.Data)
+	val, err := s.storage.Decr(key.String())
 	if err != nil {
 		return resp.WriteError(conn, "value is not an integer or out of range")
 	}
@@ -238,13 +249,13 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) error {
 
 	key := args[1].(*resp.BulkStr)
 	incrBy := args[2].(*resp.BulkStr)
-	integer, err := strconv.Atoi(incrBy.Data)
+	integer, err := strconv.Atoi(incrBy.String())
 
 	if err != nil {
 		return resp.WriteError(conn, "value is not an integer or out of range")
 	}
 
-	val, err := s.storage.IncrBy(key.Data, integer)
+	val, err := s.storage.IncrBy(key.String(), integer)
 	if err != nil {
 		return resp.WriteError(conn, "value is not an integer or out of range")
 	}
@@ -258,9 +269,31 @@ func (s *server) handleIncr(conn net.Conn, args []resp.RespType) error {
 
 	key := args[1].(*resp.BulkStr)
 
-	val, err := s.storage.Incr(key.Data)
+	val, err := s.storage.Incr(key.String())
 	if err != nil {
 		return resp.WriteError(conn, "value is not an integer or out of range")
 	}
 	return resp.WriteInt(conn, val)
 }
+
+
+func fromStoreToResp(v store.Value) (resp.RespType, error) {
+	t := v.StorageValueType()
+	switch  t {
+	case store.Int:
+		return &resp.Intiger{
+			Data: v.(*store.IntValue).Data,
+		}, nil
+	case store.String:
+		return &resp.BulkStr{
+			Data: v.(*store.StringValue).Data,
+		}, nil
+	default:
+		return nil, ErrUnknownStoreType
+	}
+}
+
+
+
+
+

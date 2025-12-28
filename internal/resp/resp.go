@@ -37,10 +37,7 @@ const (
 
 type CommandType string
 
-type commandState string
-
 type Command struct {
-	state commandState
 	arr   *RespArray
 }
 
@@ -103,7 +100,7 @@ func CommandFromReader(reader io.Reader) (*Command, error) {
 
 		args.Append(
 			&BulkStr{
-				Data: string(arg),
+				Data: arg,
 			},
 		)
 
