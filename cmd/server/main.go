@@ -5,9 +5,14 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"time"
+
+	"runtime"
+	"net/http"
 
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type server struct {
@@ -37,6 +42,14 @@ func (s *server) run() error {
 
 	s.ln = ln
 	go s.storage.StartJanitor()
+	go func ()  {
+		for {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+            memoryUsage.Set(float64(m.Alloc))
+			time.Sleep(time.Millisecond * 500)
+		}
+	}()
 	return s.accept()
 }
 
@@ -47,7 +60,11 @@ func newServer(storage *store.Storage) *server {
 }
 
 func (s *server) handle(conn net.Conn) error {
-	defer conn.Close()
+	defer func() { 
+		conn.Close() 
+		activeConnections.Dec()
+	}()
+	activeConnections.Inc()
 	for {
 
 		command, err := resp.CommandFromReader(conn)
@@ -73,7 +90,11 @@ func (s *server) handle(conn net.Conn) error {
 				break
 			}
 
-			if err := handler(conn, args); err != nil {
+			if err := metricsMiddleWare(metricsMiddeleWareArgs{
+				Conn: conn,
+				Args: args,
+				Handler: handler,
+			}); err != nil {
 				if err == io.EOF {
 					return nil
 				}
@@ -104,6 +125,9 @@ func main() {
 	commandHandlers[resp.INCRBY] = server.handleIncrBy
 	commandHandlers[resp.PING] = server.handlePing
 
+	// prometheus
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":2112", nil)
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {
