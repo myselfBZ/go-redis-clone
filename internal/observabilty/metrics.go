@@ -1,4 +1,4 @@
-package main
+package observabilty
 
 import (
     "github.com/prometheus/client_golang/prometheus"
@@ -7,7 +7,7 @@ import (
 
 var (
     // Counter for total commands processed
-    commandsProcessed = promauto.NewCounterVec(
+    CommandsProcessed = promauto.NewCounterVec(
         prometheus.CounterOpts{
             Name: "redis_commands_total",
             Help: "Total number of Redis commands processed",
@@ -16,7 +16,7 @@ var (
     )
 
     // Gauge for current connections
-    activeConnections = promauto.NewGauge(
+    ActiveConnections = promauto.NewGauge(
         prometheus.GaugeOpts{
             Name: "redis_active_connections",
             Help: "Number of active client connections",
@@ -24,7 +24,7 @@ var (
     )
 
     // Histogram for command duration
-    commandDuration = promauto.NewHistogramVec(
+    CommandDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
             Name: "redis_command_duration_seconds",
             Help: "Command execution duration in seconds",
@@ -34,7 +34,7 @@ var (
     )
 
     // Gauge for memory usage
-    memoryUsage = promauto.NewGauge(
+    MemoryUsage = promauto.NewGauge(
         prometheus.GaugeOpts{
             Name: "redis_memory_bytes",
             Help: "Current memory usage in bytes",
@@ -42,7 +42,7 @@ var (
     )
 
     // Gauge for keys stored
-    keysStored = promauto.NewGauge(
+    KeysStored = promauto.NewGauge(
         prometheus.GaugeOpts{
             Name: "redis_keys_total",
             Help: "Total number of keys stored",

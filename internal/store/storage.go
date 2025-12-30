@@ -5,6 +5,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/myselfBZ/go-redis-clone/internal/observabilty"
 )
 
 var (
@@ -263,6 +265,7 @@ func (s *Storage) Set(args SetArgs) bool {
 			delete(s.expiringKeys, args.Key)
 		}
 
+		observabilty.KeysStored.Inc()
 		written = true
 	}
 	s.mu.Unlock()
@@ -320,6 +323,7 @@ func (s *Storage) Persist(key string) bool {
 func (s *Storage) deleteKey(key string) {
 	delete(s.data, key)
 	delete(s.expiringKeys, key)
+	observabilty.KeysStored.Dec()
 }
 
 // under lock only
@@ -333,6 +337,7 @@ func (s *Storage) deleteIfExpired(key string) bool {
 	if time.Now().After(expiresAt) {
 		delete(s.data, key)
 		delete(s.expiringKeys, key)
+		observabilty.KeysStored.Dec()
 		return true
 	}
 	return false

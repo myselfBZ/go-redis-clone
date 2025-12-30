@@ -1,8 +1,11 @@
 package main
-import(
+
+import (
 	"net"
-    "github.com/prometheus/client_golang/prometheus"
+
+	"github.com/myselfBZ/go-redis-clone/internal/observabilty"
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type metricsMiddeleWareArgs struct {
@@ -13,10 +16,10 @@ type metricsMiddeleWareArgs struct {
 }
 
 func metricsMiddleWare(args metricsMiddeleWareArgs) (error) {
-	timer := prometheus.NewTimer(commandDuration.WithLabelValues(string(args.Command)))
+	timer := prometheus.NewTimer(observabilty.CommandDuration.WithLabelValues(string(args.Command)))
     defer func() { 
 		timer.ObserveDuration() 
-		commandsProcessed.WithLabelValues(string(args.Command)).Inc()
+		observabilty.CommandsProcessed.WithLabelValues(string(args.Command)).Inc()
 	}()
 
 	return args.Handler(args.Conn, args.Args)

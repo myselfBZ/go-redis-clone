@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"runtime"
 	"net/http"
+	"runtime"
 
+	"github.com/myselfBZ/go-redis-clone/internal/observabilty"
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -46,7 +47,7 @@ func (s *server) run() error {
 		for {
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-            memoryUsage.Set(float64(m.Alloc))
+            observabilty.MemoryUsage.Set(float64(m.Alloc))
 			time.Sleep(time.Millisecond * 500)
 		}
 	}()
@@ -62,9 +63,9 @@ func newServer(storage *store.Storage) *server {
 func (s *server) handle(conn net.Conn) error {
 	defer func() { 
 		conn.Close() 
-		activeConnections.Dec()
+		observabilty.ActiveConnections.Dec()
 	}()
-	activeConnections.Inc()
+	observabilty.ActiveConnections.Inc()
 	for {
 
 		command, err := resp.CommandFromReader(conn)

@@ -134,7 +134,6 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 		return resp.WriteNil(conn)
 	}
 
-	keysStored.Inc()
 	return resp.WriteOK(conn)
 }
 
