@@ -31,7 +31,7 @@ const (
 	DECR    CommandType = "DECR"
 	INCRBY  CommandType = "INCRBY"
 	PING    CommandType = "PING"
-	// this is bullshit
+
 	COMMAND_DOCS CommandType = "COMMAND"
 )
 
