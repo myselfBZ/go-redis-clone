@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -91,16 +92,19 @@ func (s *server) handle(conn net.Conn) error {
 				break
 			}
 
-			if err := metricsMiddleWare(metricsMiddeleWareArgs{
+			res := metricsMiddleWare(metricsMiddeleWareArgs{
 				Conn: conn,
 				Args: args,
 				Handler: handler,
-			}); err != nil {
-				if err == io.EOF {
+			})
+
+			if err := resp.WriteRespType(conn, res.Data); err != nil {
+				if errors.Is(err, io.EOF) {
 					return nil
 				}
 
-				slog.Error("handler error", "error", err)
+				slog.Info("Connection error", "err", err)
+				resp.WriteError(conn, "internal error")
 			}
 
 		default:

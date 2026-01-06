@@ -51,12 +51,34 @@ func WritePong(conn io.Writer) error {
 	return err
 }
 
+func WriteSimpleStr(conn io.Writer, data []byte) error {
+	if _, err := conn.Write([]byte("+")); err != nil {
+		return err
+	}
+
+	if _, err := conn.Write(data); err != nil {
+		return err
+	}
+
+	if _, err := conn.Write([]byte("\r\n")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func WriteRespType(conn io.Writer, val RespType) error {
 	switch s := val.(type) {
 	case *BulkStr:
 		return WriteBulkStr(conn, s.Data)
 	case *Intiger:
 		return WriteInt(conn, s.Data)
+	case *SimpleStr:
+		return WriteSimpleStr(conn, s.Data)
+	case *RespErr:
+		return WriteError(conn, string(s.Data))
+	case *Nil:
+		return WriteNil(conn)
 	default:
 		return errors.ErrUnsupported
 	}

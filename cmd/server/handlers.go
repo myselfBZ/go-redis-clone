@@ -12,42 +12,69 @@ import (
 
 var ErrUnknownStoreType = errors.New("unknown storage level type")
 
+type Handler func(net.Conn, []resp.RespType) resp.Response
+
 var commandHandlers = map[resp.CommandType]Handler{}
 
-type Handler func(net.Conn, []resp.RespType) error
-
-
-func (s *server) handlePing(conn net.Conn, args []resp.RespType) error {
-	return resp.WritePong(conn)
+func (s *server) handlePing(conn net.Conn, args []resp.RespType) resp.Response {
+	return resp.Response{
+		Data: &resp.SimpleStr{
+			Data: []byte("PONG"),
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handleGet(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
-		return resp.WriteError(conn, "wrong number of args to 'get' ")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("wrong number of arguments to 'get'"),
+			},
+		}
 	}
 
 	key, ok := args[1].(*resp.BulkStr)
 
-	if !ok{
-		return resp.WriteError(conn, "keys must be bulk strings")
+	if !ok {
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("key must be a bulk string"),
+			},
+		}
 	}
 
 	val, err := s.storage.Get(key.String())
+
 	if err != nil {
-		return resp.WriteNil(conn)
+		return resp.Response{
+			Data: &resp.Nil{},
+		}
 	}
+
 	respVal, err := fromStoreToResp(val)
 
 	if err != nil {
-		return resp.WriteError(conn, "server encountered a problem")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("server encoutered a problem"),
+			},
+		}
 	}
 
-	return resp.WriteRespType(conn, respVal)
+	return resp.Response{
+		Data:    respVal,
+		Success: true,
+	}
 }
 
-func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) < 3 {
-		return resp.WriteError(conn, "invalid syntax")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("invalid syntax"),
+			},
+		}
 	}
 	key, value := args[1], args[2]
 
@@ -58,7 +85,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 	// might be an integer
 	parsedValue := value.(*resp.BulkStr)
 	intVal, err := strconv.Atoi(parsedValue.String())
-	
+
 	if err != nil {
 		setArgs.Value = &store.StringValue{
 			Data: parsedValue.Data,
@@ -68,7 +95,6 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 			Data: intVal,
 		}
 	}
-
 
 	for i := 3; i < len(args); i++ {
 		bulkStr := args[i].(*resp.BulkStr)
@@ -80,14 +106,22 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 			setArgs.NX = true
 		case "EX":
 
-			if i + 1 >= len(args) {
-				return resp.WriteError(conn, "invalid syntax")
+			if i+1 >= len(args) {
+				return resp.Response{
+					Data: &resp.RespErr{
+						Data: []byte("invalid syntax"),
+					},
+				}
 			}
 
-			seconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).String())
+			seconds, err := strconv.Atoi(args[i+1].(*resp.BulkStr).String())
 
 			if err != nil {
-				return resp.WriteError(conn, "invalid syntax")
+				return resp.Response{
+					Data: &resp.RespErr{
+						Data: []byte("invalid syntax"),
+					},
+				}
 			}
 
 			if seconds <= 0 {
@@ -97,70 +131,125 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) error {
 			setArgs.EX = seconds
 			i++
 		case "PX":
-			if i + 1 >= len(args) {
-				return resp.WriteError(conn, "invalid syntax")
+			if i+1 >= len(args) {
+				return resp.Response{
+					Data: &resp.RespErr{
+						Data: []byte("invalid syntax"),
+					},
+				}
 			}
 
-			milliseconds, err := strconv.Atoi(args[i + 1].(*resp.BulkStr).String())
+			milliseconds, err := strconv.Atoi(args[i+1].(*resp.BulkStr).String())
 
 			if err != nil {
-				return resp.WriteError(conn, "invalid syntax")
+				return resp.Response{
+					Data: &resp.RespErr{
+						Data: []byte("invalid syntax"),
+					},
+				}
 			}
 
 			if milliseconds <= 0 {
 				milliseconds = -1
 			}
 
-			setArgs.PX = milliseconds 
+			setArgs.PX = milliseconds
 			i++
 		default:
-			return resp.WriteError(conn, "invalid options")
+			return resp.Response{
+				Data: &resp.RespErr{
+					Data: []byte("invalid syntax"),
+				},
+			}
 		}
 	}
 
 	if setArgs.EX > 0 && setArgs.PX > 0 {
-		return resp.WriteError(conn, "EX and PX options at the same time are not compatible")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("invalid syntax"),
+			},
+		}
 	}
 
 	if setArgs.EX < 0 || setArgs.PX < 0 {
-		return resp.WriteError(conn, "invalid expire time in 'set' command")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("EX and PX options at the same time are not compatible"),
+			},
+		}
 	}
 
 	if setArgs.XX && setArgs.NX {
-		return resp.WriteError(conn, "XX and NX options at the same time are not compatible")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("XX and NX options at the same time are not compatible"),
+			},
+		}
 	}
 
 	if written := s.storage.Set(setArgs); !written {
-		return resp.WriteNil(conn)
+		return resp.Response{
+			Data: &resp.Nil{},
+		}
 	}
 
-	return resp.WriteOK(conn)
+	return resp.Response{
+		Data: &resp.SimpleStr{
+			Data: []byte("OK"),
+		},
+		Success: true,
+	}
 }
 
-
-func (s *server) handleTTL(conn net.Conn, args []resp.RespType) error {
-	if len(args) != 2  {
-		return resp.WriteError(conn, "invalid syntax")
+func (s *server) handleTTL(conn net.Conn, args []resp.RespType) resp.Response {
+	if len(args) != 2 {
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("invalid syntax"),
+			},
+		}
 	}
 
 	result := s.storage.TTL(args[1].(*resp.BulkStr).String())
-	return resp.WriteInt(conn, result)
+
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: result,
+		},
+		Success: result != -1 && result != -2,
+	}
 }
 
-func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) error {
-	if len(args) != 2  {
-		return resp.WriteError(conn, "invalid syntax")
+func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) resp.Response {
+	if len(args) != 2 {
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("invalid syntax"),
+			},
+		}
+
 	}
 
 	result := s.storage.PTTL(args[1].(*resp.BulkStr).String())
-	return resp.WriteInt(conn, result)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: result,
+		},
+		Success: result != -1 && result != -2,
+	}
 }
 
-func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) error {
-	return resp.WriteOK(conn)
+func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) resp.Response {
+	return resp.Response{
+		Data: &resp.SimpleStr{
+			Data: []byte("OK"),
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleDel(conn net.Conn, args []resp.RespType) resp.Response {
 	found := 0
 	for _, arg := range args[1:] {
 		keyBulkStr, ok := arg.(*resp.BulkStr)
@@ -172,21 +261,34 @@ func (s *server) handleDel(conn net.Conn, args []resp.RespType) error {
 			found += 1
 		}
 	}
-	return resp.WriteInt(conn, found)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: found,
+		},
+		Success: found > 0,
+	}
 }
 
-func (s *server) handleExpire(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) < 3 {
-		return resp.WriteError(conn, "invalid syntax")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("invalid syntax"),
+			},
+		}
 	}
 
 	seconds, err := strconv.Atoi(args[2].(*resp.BulkStr).String())
 
 	if err != nil {
-		return resp.WriteError(conn, "value is not an integer or out of range")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("value is not an intiger or out of range"),
+			},
+		}
 	}
-	expireArgs  := store.ExpireArgs{
-		Key: args[1].(*resp.BulkStr).String(),
+	expireArgs := store.ExpireArgs{
+		Key:     args[1].(*resp.BulkStr).String(),
 		Seconds: seconds,
 	}
 
@@ -199,52 +301,100 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) error {
 		case "NX":
 			expireArgs.NX = true
 		default:
-			return resp.WriteError(conn, "invalid options")
+			return resp.Response{
+				Data: &resp.RespErr{
+					Data: []byte("invalid syntax"),
+				},
+			}
 		}
 	}
 
 	if expireArgs.XX && expireArgs.NX {
-		return resp.WriteError(conn, "EX and PX can't have non-zero value at a time")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("XX and NX options at the same time are not compatible"),
+			},
+		}
 	}
 
 	if written := s.storage.Expire(expireArgs); !written {
-		return resp.WriteInt(conn, 0)
+		return resp.Response{
+			Data: &resp.Intiger{
+				Data: 0,
+			},
+		}
 	}
 
-	return resp.WriteInt(conn, 1)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: 1,
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handlePersist(conn net.Conn, args []resp.RespType) error {
+func (s *server) handlePersist(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
-		return resp.WriteError(conn, "wrong number of arguments for 'persist' command")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("wrong number of arguments to 'persist'"),
+			},
+		}
 	}
 
 	written := s.storage.Persist(args[1].(*resp.BulkStr).String())
 
 	if !written {
-		return resp.WriteInt(conn, 0)
+		return resp.Response{
+			Data: &resp.Intiger{
+				Data: 0,
+			},
+			Success: true,
+		}
 	}
 
-	return resp.WriteInt(conn, 1)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: 1,
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handleDecr(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
-		return resp.WriteError(conn, "wrong number of arguments for 'decr' command")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("wrong number of arguments to 'decr'"),
+			},
+		}
 	}
 
 	key := args[1].(*resp.BulkStr)
 
 	val, err := s.storage.Decr(key.String())
 	if err != nil {
-		return resp.WriteError(conn, "value is not an integer or out of range")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("value is not an intiger or out of range"),
+			},
+		}
 	}
-	return resp.WriteInt(conn, val)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: val,
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 3 {
-		return resp.WriteError(conn, "wrong number of arguments for 'incrby' command")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("wrong number of arguments to 'incrby'"),
+			},
+		}
 	}
 
 	key := args[1].(*resp.BulkStr)
@@ -252,34 +402,59 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) error {
 	integer, err := strconv.Atoi(incrBy.String())
 
 	if err != nil {
-		return resp.WriteError(conn, "value is not an integer or out of range")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("value is not an intiger or out of range"),
+			},
+		}
 	}
 
 	val, err := s.storage.IncrBy(key.String(), integer)
 	if err != nil {
-		return resp.WriteError(conn, "value is not an integer or out of range")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("value is not an intiger or out of range"),
+			},
+		}
 	}
-	return resp.WriteInt(conn, val)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: val,
+		},
+		Success: true,
+	}
 }
 
-func (s *server) handleIncr(conn net.Conn, args []resp.RespType) error {
+func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
-		return resp.WriteError(conn, "wrong number of arguments for 'incr' command")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("wrong number of arguments to 'incr'"),
+			},
+		}
 	}
 
 	key := args[1].(*resp.BulkStr)
 
 	val, err := s.storage.Incr(key.String())
 	if err != nil {
-		return resp.WriteError(conn, "value is not an integer or out of range")
+		return resp.Response{
+			Data: &resp.RespErr{
+				Data: []byte("value is not an intiger or out of range"),
+			},
+		}
 	}
-	return resp.WriteInt(conn, val)
+	return resp.Response{
+		Data: &resp.Intiger{
+			Data: val,
+		},
+		Success: true,
+	}
 }
-
 
 func fromStoreToResp(v store.Value) (resp.RespType, error) {
 	t := v.StorageValueType()
-	switch  t {
+	switch t {
 	case store.Int:
 		return &resp.Intiger{
 			Data: v.(*store.IntValue).Data,
@@ -292,8 +467,3 @@ func fromStoreToResp(v store.Value) (resp.RespType, error) {
 		return nil, ErrUnknownStoreType
 	}
 }
-
-
-
-
-

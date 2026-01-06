@@ -15,7 +15,7 @@ type metricsMiddeleWareArgs struct {
 	Handler Handler
 }
 
-func metricsMiddleWare(args metricsMiddeleWareArgs) (error) {
+func metricsMiddleWare(args metricsMiddeleWareArgs) resp.Response {
 	timer := prometheus.NewTimer(observabilty.CommandDuration.WithLabelValues(string(args.Command)))
     defer func() { 
 		timer.ObserveDuration() 

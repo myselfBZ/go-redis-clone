@@ -1,9 +1,9 @@
 package resp
 
 import (
-	"errors"
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -38,11 +38,16 @@ const (
 type CommandType string
 
 type Command struct {
-	arr   *RespArray
+	arr *RespArray
 }
 
 func (c *Command) Args() []RespType {
 	return c.arr.elements
+}
+
+type Response struct {
+	Data    RespType
+	Success bool
 }
 
 func CommandFromReader(reader io.Reader) (*Command, error) {
@@ -82,7 +87,6 @@ func CommandFromReader(reader io.Reader) (*Command, error) {
 			return nil, fmt.Errorf("invalid protocol")
 		}
 
-
 		if len(line) == 0 || line[0] != '$' {
 			return nil, fmt.Errorf("invalid protocol")
 		}
@@ -110,7 +114,7 @@ func CommandFromReader(reader io.Reader) (*Command, error) {
 			return nil, io.EOF
 		}
 
-		if len(end) != 2  || end[0] != '\r'{
+		if len(end) != 2 || end[0] != '\r' {
 			return nil, fmt.Errorf("invalid protocol")
 		}
 	}
