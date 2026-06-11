@@ -167,7 +167,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if setArgs.EX > 0 && setArgs.PX > 0 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("invalid syntax"),
+				Data: []byte("EX and PX options at the same time are not compatible"),
 			},
 		}
 	}
