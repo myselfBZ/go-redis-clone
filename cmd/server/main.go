@@ -27,6 +27,13 @@ func (s *server) accept() error {
 		conn, err := s.ln.Accept()
 
 		if err != nil {
+
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				slog.Info("temporary accept outage: retry in 5ms", "error", err)
+				time.Sleep(5 * time.Millisecond)
+				continue
+			}
+
 			slog.Error("failed to accept connection s.ln.Accept()", "error", err.Error())
 			continue
 		}
