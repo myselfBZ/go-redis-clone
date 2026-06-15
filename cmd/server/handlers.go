@@ -29,7 +29,7 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("wrong number of arguments to 'get'"),
+				Data: []byte("ERR wrong number of arguments to 'get'"),
 			},
 		}
 	}
@@ -39,7 +39,7 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 	if !ok {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("key must be a bulk string"),
+				Data: []byte("ERR key must be a bulk string"),
 			},
 		}
 	}
@@ -48,7 +48,9 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 
 	if err != nil {
 		return resp.Response{
-			Data: &resp.Nil{},
+			Data: &resp.BulkStr{
+				Data: nil,
+			},
 		}
 	}
 
@@ -66,7 +68,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) < 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("invalid syntax"),
+				Data: []byte("ERR invalid syntax"),
 			},
 		}
 	}
@@ -92,7 +94,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 			if i+1 >= len(args) {
 				return resp.Response{
 					Data: &resp.RespErr{
-						Data: []byte("invalid syntax"),
+						Data: []byte("ERR invalid syntax"),
 					},
 				}
 			}
@@ -102,7 +104,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 			if err != nil {
 				return resp.Response{
 					Data: &resp.RespErr{
-						Data: []byte("invalid syntax"),
+						Data: []byte("ERR invalid syntax"),
 					},
 				}
 			}
@@ -117,7 +119,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 			if i+1 >= len(args) {
 				return resp.Response{
 					Data: &resp.RespErr{
-						Data: []byte("invalid syntax"),
+						Data: []byte("ERR invalid syntax"),
 					},
 				}
 			}
@@ -127,7 +129,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 			if err != nil {
 				return resp.Response{
 					Data: &resp.RespErr{
-						Data: []byte("invalid syntax"),
+						Data: []byte("ERR invalid syntax"),
 					},
 				}
 			}
@@ -141,7 +143,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 		default:
 			return resp.Response{
 				Data: &resp.RespErr{
-					Data: []byte("invalid syntax"),
+					Data: []byte("ERR invalid syntax"),
 				},
 			}
 		}
@@ -150,7 +152,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if setArgs.EX > 0 && setArgs.PX > 0 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("EX and PX options at the same time are not compatible"),
+				Data: []byte("ERR EX and PX options at the same time are not compatible"),
 			},
 		}
 	}
@@ -158,7 +160,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if setArgs.EX < 0 || setArgs.PX < 0 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("EX and PX options at the same time are not compatible"),
+				Data: []byte("ERR EX and PX options at the same time are not compatible"),
 			},
 		}
 	}
@@ -166,14 +168,16 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	if setArgs.XX && setArgs.NX {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("XX and NX options at the same time are not compatible"),
+				Data: []byte("ERR XX and NX options at the same time are not compatible"),
 			},
 		}
 	}
 
 	if written := s.storage.Set(setArgs); !written {
 		return resp.Response{
-			Data: &resp.Nil{},
+			Data: &resp.BulkStr{
+				Data: nil,
+			},
 		}
 	}
 
@@ -189,7 +193,7 @@ func (s *server) handleTTL(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("invalid syntax"),
+				Data: []byte("ERR invalid syntax"),
 			},
 		}
 	}
@@ -208,7 +212,7 @@ func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("invalid syntax"),
+				Data: []byte("ERR invalid syntax"),
 			},
 		}
 
@@ -257,7 +261,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 	if len(args) < 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("invalid syntax"),
+				Data: []byte("ERR invalid syntax"),
 			},
 		}
 	}
@@ -267,7 +271,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("value is not an intiger or out of range"),
+				Data: []byte("ERR value is not an intiger or out of range"),
 			},
 		}
 	}
@@ -287,7 +291,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 		default:
 			return resp.Response{
 				Data: &resp.RespErr{
-					Data: []byte("invalid syntax"),
+					Data: []byte("ERR invalid syntax"),
 				},
 			}
 		}
@@ -296,7 +300,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 	if expireArgs.XX && expireArgs.NX {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("XX and NX options at the same time are not compatible"),
+				Data: []byte("ERR XX and NX options at the same time are not compatible"),
 			},
 		}
 	}
@@ -321,7 +325,7 @@ func (s *server) handlePersist(conn net.Conn, args []resp.RespType) resp.Respons
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("wrong number of arguments to 'persist'"),
+				Data: []byte("ERR wrong number of arguments to 'persist'"),
 			},
 		}
 	}
@@ -349,7 +353,7 @@ func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("wrong number of arguments to 'decr'"),
+				Data: []byte("ERR wrong number of arguments to 'decr'"),
 			},
 		}
 	}
@@ -360,7 +364,7 @@ func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("value is not an intiger or out of range"),
+				Data: []byte("ERR value is not an intiger or out of range"),
 			},
 		}
 	}
@@ -376,7 +380,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 	if len(args) != 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("wrong number of arguments to 'incrby'"),
+				Data: []byte("ERR wrong number of arguments to 'incrby'"),
 			},
 		}
 	}
@@ -388,7 +392,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("value is not an intiger or out of range"),
+				Data: []byte("ERR value is not an intiger or out of range"),
 			},
 		}
 	}
@@ -397,7 +401,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("value is not an intiger or out of range"),
+				Data: []byte("ERR value is not an intiger or out of range"),
 			},
 		}
 	}
@@ -413,7 +417,7 @@ func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("wrong number of arguments to 'incr'"),
+				Data: []byte("ERR wrong number of arguments to 'incr'"),
 			},
 		}
 	}
@@ -424,7 +428,7 @@ func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
-				Data: []byte("value is not an intiger or out of range"),
+				Data: []byte("ERR value is not an intiger or out of range"),
 			},
 		}
 	}

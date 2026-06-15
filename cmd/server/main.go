@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -77,12 +78,20 @@ func (s *server) handle(conn net.Conn)  {
 		command, err := resp.Parse(conn)
 
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				slog.Info("Client disconnected")
 				return
 			}
 
-			resp.WriteBulkStr(conn, []byte(err.Error()))
+			// protocol error
+			respErr := resp.RespErr{
+				Data: []byte(err.Error()),
+			}
+
+			if _, err := conn.Write(respErr.ToBytes()); err != nil {
+				slog.Info("Client disconnected")
+				return
+			}
 			continue
 		}
 
@@ -93,7 +102,10 @@ func (s *server) handle(conn net.Conn)  {
 
 			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.String()))]
 			if !ok {
-				resp.WriteError(conn, "invalid command")
+				respErr := resp.RespErr{
+					Data: []byte("invalid command"),
+				}
+				conn.Write(respErr.ToBytes())
 				continue
 		}
 
@@ -103,13 +115,16 @@ func (s *server) handle(conn net.Conn)  {
 				Handler: handler,
 			})
 
-			if err := resp.WriteRespType(conn, res.Data); err != nil {
+			if _, err := conn.Write(res.Data.ToBytes()); err != nil {
 				slog.Error("connection write error", "err", err)
 				return
 			}
 
 		default:
-			if err := resp.WriteError(conn, "invalid protocol"); err != nil {
+			respErr := resp.RespErr{
+				Data: []byte("invalid protocol"),
+			}
+			if _, err := conn.Write(respErr.ToBytes()); err != nil {
 				slog.Error("connection write error", "err", err)
 				return
 			}
