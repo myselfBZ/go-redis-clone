@@ -94,16 +94,14 @@ func (s *server) handle(conn net.Conn)  {
 			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.String()))]
 			if !ok {
 				resp.WriteError(conn, "invalid command")
-				break
-			}
+				continue
+		}
 
 			res := metricsMiddleWare(metricsMiddeleWareArgs{
 				Conn: conn,
 				Args: args,
 				Handler: handler,
 			})
-
-			conn.SetWriteDeadline(time.Now().Add(time.Second))
 
 			if err := resp.WriteRespType(conn, res.Data); err != nil {
 				slog.Error("connection write error", "err", err)
