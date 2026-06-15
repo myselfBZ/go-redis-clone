@@ -50,7 +50,7 @@ type Response struct {
 	Success bool
 }
 
-func CommandFromReader(reader io.Reader) (*Command, error) {
+func Parse(reader io.Reader) (*Command, error) {
 	bufReader := bufio.NewReader(reader)
 	line, err := bufReader.ReadBytes('\n')
 	if err != nil {

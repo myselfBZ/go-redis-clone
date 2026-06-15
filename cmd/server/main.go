@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -68,20 +67,19 @@ func newServer(storage *store.Storage) *server {
 	}
 }
 
-func (s *server) handle(conn net.Conn) error {
+func (s *server) handle(conn net.Conn)  {
 	defer func() { 
 		conn.Close() 
 		observabilty.ActiveConnections.Dec()
 	}()
 	observabilty.ActiveConnections.Inc()
 	for {
-
-		command, err := resp.CommandFromReader(conn)
+		command, err := resp.Parse(conn)
 
 		if err != nil {
 			if err == io.EOF {
 				slog.Info("Client disconnected")
-				return nil
+				return
 			}
 
 			resp.WriteBulkStr(conn, []byte(err.Error()))
@@ -105,17 +103,18 @@ func (s *server) handle(conn net.Conn) error {
 				Handler: handler,
 			})
 
-			if err := resp.WriteRespType(conn, res.Data); err != nil {
-				if errors.Is(err, io.EOF) {
-					return nil
-				}
+			conn.SetWriteDeadline(time.Now().Add(time.Second))
 
-				slog.Info("Connection error", "err", err)
-				resp.WriteError(conn, "internal error")
+			if err := resp.WriteRespType(conn, res.Data); err != nil {
+				slog.Error("connection write error", "err", err)
+				return
 			}
 
 		default:
-			resp.WriteError(conn, "invalid protocol")
+			if err := resp.WriteError(conn, "invalid protocol"); err != nil {
+				slog.Error("connection write error", "err", err)
+				return
+			}
 		}
 	}
 }
