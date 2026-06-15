@@ -56,14 +56,6 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 		Data: val,
 	}
 
-	if err != nil {
-		return resp.Response{
-			Data: &resp.RespErr{
-				Data: []byte("server encoutered a problem"),
-			},
-		}
-	}
-
 	return resp.Response{
 		Data:    respVal,
 		Success: true,
