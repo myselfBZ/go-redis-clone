@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ var (
 func NewStorage() *Storage {
 	return &Storage{
 		mu:   sync.RWMutex{},
-		data: make(map[string]Value),
+		data: make(map[string]*dataEntity),
 		janitor: &janitor{
 			interval: time.Minute,
 			exit:     make(chan struct{}),
@@ -28,7 +29,7 @@ func NewStorage() *Storage {
 
 type SetArgs struct {
 	Key   string
-	Value Value
+	Value interface{}
 
 	PX int // ms
 	EX int // seconds
@@ -64,7 +65,7 @@ func (j *janitor) run(s *Storage) {
 
 type Storage struct {
 	mu      sync.RWMutex
-	data    map[string]Value
+	data    map[string]*dataEntity
 	janitor *janitor
 
 	expiringKeys map[string]time.Time
@@ -74,7 +75,7 @@ func (s *Storage) StartJanitor() {
 	s.janitor.run(s)
 }
 
-func (s *Storage) PTTL(key string) int {
+func (s *Storage) PTTL(key string) int64 {
 	s.mu.RLock()
 	expiresAt, hasExpire := s.expiringKeys[key]
 	_, existsInCache := s.data[key]
@@ -91,12 +92,12 @@ func (s *Storage) PTTL(key string) int {
 	if s.deleteIfExpired(key) {
 		return -2
 	}
-	ttl := int(math.Round(float64(time.Until(expiresAt).Milliseconds())))
+	ttl := int64(math.Round(float64(time.Until(expiresAt).Milliseconds())))
 	return ttl
 
 }
 
-func (s *Storage) TTL(key string) int {
+func (s *Storage) TTL(key string) int64 {
 	s.mu.RLock()
 	expiresAt, hasExpire := s.expiringKeys[key]
 	_, existsInCache := s.data[key]
@@ -113,68 +114,85 @@ func (s *Storage) TTL(key string) int {
 	if s.deleteIfExpired(key) {
 		return -2
 	}
-	ttl := int(math.Round(time.Until(expiresAt).Seconds()))
+	ttl := int64(math.Round(time.Until(expiresAt).Seconds()))
 	return ttl
 }
 
-func (s *Storage) Decr(key string) (int, error) {
+func (s *Storage) Decr(key string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	val, exists := s.data[key]
+	entity, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &IntValue{
-			Data: -1,
+		s.data[key] = &dataEntity{
+			val: -1,
 		}
 		return -1, nil
 	}
 
-	if val.StorageValueType() != "intiger" {
-		return 0, ErrNotInteger 
+	val := entity.val.([]byte)
+
+	validInt, err := strconv.ParseInt(string(val), 10, 64)
+	
+	if err != nil {
+		return 0, ErrNotInteger
 	}
 
-	intType := val.(*IntValue)
-	intType.Data--
-	return intType.Data, nil
+	validInt--
+
+	entity.val = []byte(strconv.FormatInt(validInt, 10))
+
+	return validInt, nil
 }
 
-func (s *Storage) IncrBy(key string, by int) (int, error) {
+func (s *Storage) IncrBy(key string, by int64) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	val, exists := s.data[key]
+	entity, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &IntValue{
-			Data: by,
+		s.data[key] = &dataEntity{
+			val: by,
 		}
 		return by, nil
 	}
+	val := entity.val.([]byte)
 
-	if val.StorageValueType() != "intiger" {
-		return 0, ErrNotInteger 
+	validInt, err := strconv.ParseInt(string(val), 10, 64)
+	
+	if err != nil {
+		return 0, ErrNotInteger
 	}
 
-	intType := val.(*IntValue)
-	intType.Data += by
-	return intType.Data, nil
+	validInt += by
+
+	entity.val = []byte(strconv.FormatInt(validInt, 10))
+
+	return validInt, nil
 }
 
-func (s *Storage) Incr(key string) (int, error) {
+func (s *Storage) Incr(key string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	val, exists := s.data[key]
+	entity, exists := s.data[key]
 	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &IntValue{
-			Data: 1,
+		s.data[key] = &dataEntity{
+			val: 1,
 		}
 		return 1, nil
 	}
 
-	if val.StorageValueType() != "intiger" {
-		return 0, ErrNotInteger 
+	val := entity.val.([]byte)
+
+	validInt, err := strconv.ParseInt(string(val), 10, 64)
+	
+	if err != nil {
+		return 0, ErrNotInteger
 	}
 
-	intType := val.(*IntValue)
-	intType.Data++
-	return intType.Data, nil
+	validInt++
+
+	entity.val = []byte(strconv.FormatInt(validInt, 10))
+
+	return validInt, nil
 }
 
 
@@ -249,7 +267,10 @@ func (s *Storage) Set(args SetArgs) bool {
 	_, hasExpiration := s.expiringKeys[args.Key]
 
 	if (ok && args.XX) || (!ok && args.NX) || (!args.XX && !args.NX) {
-		s.data[args.Key] = args.Value
+		s.data[args.Key] = &dataEntity{
+			val: args.Value,
+		}
+
 
 		if args.EX > 0 {
 			expiresAt := time.Now().Add(time.Duration(args.EX) * time.Second)
@@ -272,7 +293,7 @@ func (s *Storage) Set(args SetArgs) bool {
 	return written
 }
 
-func (s *Storage) Get(key string) (Value, error) {
+func (s *Storage) Get(key string) ([]byte, error) {
 	s.mu.Lock()
 	if s.deleteIfExpired(key) {
 		s.mu.Unlock()
@@ -285,7 +306,8 @@ func (s *Storage) Get(key string) (Value, error) {
 		return nil, ErrNotFound
 	}
 
-	return data, nil
+	val := data.val.([]byte)
+	return val, nil
 }
 
 func (s *Storage) Del(key string) error {

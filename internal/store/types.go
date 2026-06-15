@@ -5,6 +5,11 @@ const (
 	String = "string"
 )
 
+
+type dataEntity struct {
+	val interface{}
+}
+
 type Value interface {
 	StorageValueType() string
 }

@@ -39,7 +39,7 @@ func (rt *BulkStr) String() string {
 }
 
 type Intiger struct {
-	Data int
+	Data int64
 }
 
 func (rt *Intiger) Type() string {

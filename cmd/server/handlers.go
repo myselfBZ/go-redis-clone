@@ -52,7 +52,9 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 		}
 	}
 
-	respVal, err := fromStoreToResp(val)
+	respVal := &resp.BulkStr{
+		Data: val,
+	}
 
 	if err != nil {
 		return resp.Response{
@@ -82,19 +84,8 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 		Key: key.(*resp.BulkStr).String(),
 	}
 
-	// might be an integer
 	parsedValue := value.(*resp.BulkStr)
-	intVal, err := strconv.Atoi(parsedValue.String())
-
-	if err != nil {
-		setArgs.Value = &store.StringValue{
-			Data: parsedValue.Data,
-		}
-	} else {
-		setArgs.Value = &store.IntValue{
-			Data: intVal,
-		}
-	}
+	setArgs.Value = parsedValue.Data
 
 	for i := 3; i < len(args); i++ {
 		bulkStr := args[i].(*resp.BulkStr)
@@ -250,7 +241,8 @@ func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) resp.Res
 }
 
 func (s *server) handleDel(conn net.Conn, args []resp.RespType) resp.Response {
-	found := 0
+	var found int64 = 0
+
 	for _, arg := range args[1:] {
 		keyBulkStr, ok := arg.(*resp.BulkStr)
 		if !ok {
@@ -399,7 +391,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 
 	key := args[1].(*resp.BulkStr)
 	incrBy := args[2].(*resp.BulkStr)
-	integer, err := strconv.Atoi(incrBy.String())
+	integer, err := strconv.ParseInt(incrBy.String(), 10, 64)
 
 	if err != nil {
 		return resp.Response{
@@ -449,21 +441,5 @@ func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
 			Data: val,
 		},
 		Success: true,
-	}
-}
-
-func fromStoreToResp(v store.Value) (resp.RespType, error) {
-	t := v.StorageValueType()
-	switch t {
-	case store.Int:
-		return &resp.Intiger{
-			Data: v.(*store.IntValue).Data,
-		}, nil
-	case store.String:
-		return &resp.BulkStr{
-			Data: v.(*store.StringValue).Data,
-		}, nil
-	default:
-		return nil, ErrUnknownStoreType
 	}
 }
