@@ -5,7 +5,12 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"net/http"
@@ -18,8 +23,12 @@ import (
 )
 
 type server struct {
+	// net.Conn -> placeholder (struct{}{})
+	conns	sync.Map 	
 	storage *store.Storage
 	ln      net.Listener
+
+	closing atomic.Bool
 }
 
 func (s *server) accept() error {
@@ -34,52 +43,112 @@ func (s *server) accept() error {
 				continue
 			}
 
-			slog.Error("failed to accept connection s.ln.Accept()", "error", err.Error())
-			continue
-		}
+			// Listener closed intentionally
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
 
-		slog.Info("connection accepted")
-		go s.handle(conn)
+			return err
+		}
+		go s.handle(conn) 
 	}
 }
 
 func (s *server) run() error {
+	errCh := make(chan error)
+	closeChan := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-sigCh
+		close(closeChan)
+	}()
+
 	ln, err := net.Listen("tcp", ":6379")
 	if err != nil {
 		return err
 	}
 
 	s.ln = ln
-	go s.storage.StartJanitor()
-	go func ()  {
+
+	// heap watch
+	go func() {
 		for {
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-            observabilty.MemoryUsage.Set(float64(m.Alloc))
+			observabilty.MemoryUsage.Set(float64(m.Alloc))
 			time.Sleep(time.Millisecond * 500)
 		}
 	}()
-	return s.accept()
+
+	go func () { 
+		if err := s.accept(); err != nil {
+			errCh <- err
+		} 
+	}()
+
+	select {
+	case err = <- errCh:
+	case <- closeChan:
+		slog.Info("Graceful shut down intialized...")
+	}
+
+	s.close()
+
+	return err
+}
+
+func (s *server) close() {
+	s.closing.Store(true)
+	s.ln.Close()
+	s.conns.Range(func(key, value any) bool {
+		conn := key.(net.Conn)
+		conn.Close()
+		return true
+	})
+
+	// resetting 
+	s.conns = sync.Map{}
+	s.storage.Close()
+}
+
+func (s *server) closeClient(conn net.Conn) {
+	conn.Close()
+	s.conns.Delete(conn)
 }
 
 func newServer(storage *store.Storage) *server {
 	return &server{
 		storage: storage,
+		conns: sync.Map{},
+		closing: atomic.Bool{},
 	}
 }
 
-func (s *server) handle(conn net.Conn)  {
-	defer func() { 
-		conn.Close() 
+func (s *server) handle(conn net.Conn) {
+	if s.closing.Load() {
+		conn.Close()
+		return
+	}
+
+	slog.Info("Connection accepted")
+	s.conns.Store(conn, struct{}{})
+
+	defer func() {
+		slog.Info("Closing client connection")
+		s.closeClient(conn)
 		observabilty.ActiveConnections.Dec()
 	}()
+
 	observabilty.ActiveConnections.Inc()
 	for {
 		command, err := resp.Parse(conn)
 
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				slog.Info("Client disconnected")
+			if errors.Is(err, io.EOF) || 
+			errors.Is(err, io.ErrUnexpectedEOF) || 
+			strings.Contains(err.Error(), "use of closed network connection") {
 				return
 			}
 
@@ -89,9 +158,9 @@ func (s *server) handle(conn net.Conn)  {
 			}
 
 			if _, err := conn.Write(respErr.ToBytes()); err != nil {
-				slog.Info("Client disconnected")
 				return
 			}
+
 			continue
 		}
 
@@ -107,11 +176,11 @@ func (s *server) handle(conn net.Conn)  {
 				}
 				conn.Write(respErr.ToBytes())
 				continue
-		}
+			}
 
 			res := metricsMiddleWare(metricsMiddeleWareArgs{
-				Conn: conn,
-				Args: args,
+				Conn:    conn,
+				Args:    args,
 				Handler: handler,
 			})
 
@@ -157,4 +226,6 @@ func main() {
 	if err := server.run(); err != nil {
 		slog.Error("server stopped", "error", err.Error())
 	}
+
+	slog.Info("server stopped without any issues")
 }

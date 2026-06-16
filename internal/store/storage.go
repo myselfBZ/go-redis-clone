@@ -16,7 +16,7 @@ var (
 )
 
 func NewStorage() *Storage {
-	return &Storage{
+	s := &Storage{
 		mu:   sync.RWMutex{},
 		data: make(map[string]*dataEntity),
 		janitor: &janitor{
@@ -25,6 +25,8 @@ func NewStorage() *Storage {
 		},
 		expiringKeys: make(map[string]time.Time),
 	}
+	go s.startJanitor()
+	return s
 }
 
 type SetArgs struct {
@@ -71,7 +73,11 @@ type Storage struct {
 	expiringKeys map[string]time.Time
 }
 
-func (s *Storage) StartJanitor() {
+func (s *Storage) Close() {
+	s.janitor.exit <- struct{}{}
+}
+
+func (s *Storage) startJanitor() {
 	s.janitor.run(s)
 }
 
