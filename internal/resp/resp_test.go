@@ -33,7 +33,7 @@ func TestParseCommand(t *testing.T) {
 		numBytesPerRead: 1,
 	}
 
-	command, err := CommandFromReader(reader)
+	command, err := Parse(reader)
 	// i mean... yeah it is hacky
 	require.NotNil(t, err)
 
@@ -42,7 +42,7 @@ func TestParseCommand(t *testing.T) {
 		numBytesPerRead: 1,
 	}
 
-	command, err = CommandFromReader(reader)
+	command, err = Parse(reader)
 
 	require.Error(t, err)
 	require.Nil(t, command)
@@ -52,7 +52,7 @@ func TestParseCommand(t *testing.T) {
 		numBytesPerRead: 1,
 	}
 
-	command, err = CommandFromReader(reader)
+	command, err = Parse(reader)
 
 	require.NoError(t, err)
 	
@@ -68,6 +68,6 @@ func TestParseCommand(t *testing.T) {
 		numBytesPerRead: 1,
 	}
 
-	command, err = CommandFromReader(reader)
+	command, err = Parse(reader)
 	require.Error(t, err)
 }
