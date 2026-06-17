@@ -416,7 +416,7 @@ func (s *Storage) exists(key string) bool {
 }
 
 func (s *Storage) get(key string) (*dataEntity, bool) {
-	s.deleteIfExpired(key)
+	s.deleteIfExpired0(key)
 	en, ok := s.data[key]
 	return en, ok
 }
