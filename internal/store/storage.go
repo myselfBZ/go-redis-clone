@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,8 @@ type kVStore interface {
 	putIfExists(key string, val *dataEntity) int
 	expire(key string, at time.Time)
 	putIfAbsent(key string, val *dataEntity) int
+	// returns ms
+	getExpiresAt(key string) (time.Time, bool)
 	get(key string) (*dataEntity, bool)
 }
 
@@ -84,15 +87,18 @@ type Storage struct {
 
 
 func (s *Storage) Exec(cmd [][]byte) resp.RespType {
-	name := string(cmd[0])
+	name := strings.ToLower(string(cmd[0]))
 	c, ok := cmdTable[name]
 	if !ok {
 		return resp.MakeErr("ERR invalid command")
 	}
 
-	if !validArity(c.arity, len(cmd[1:])) {
+	if !validArity(c.arity, len(cmd)) {
 		return resp.ArgNumErr(name)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return c.exec(s, cmd[1:])
 }
@@ -438,6 +444,11 @@ func (s *Storage) putIfAbsent(key string, val *dataEntity) int {
 	}
 	_ = s.put(key, val)
 	return 1
+}
+
+func (s *Storage) getExpiresAt(key string) (time.Time, bool) {
+	t, ok := s.expiringKeys[key]
+	return t, ok
 }
 
 func (s *Storage) expire(key string, at time.Time) {

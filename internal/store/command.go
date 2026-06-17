@@ -1,6 +1,7 @@
 package store
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,27 @@ type Exec func(db kVStore, args [][]byte) resp.RespType
 type command struct {
 	arity int
 	exec Exec
+}
+
+func execTtl(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+	_, ok := db.get(key)
+	if !ok {
+		return &resp.Intiger{
+			Data: -2,
+		}
+	}
+	t, ok := db.getExpiresAt(key)
+	if !ok {
+		return &resp.Intiger{
+			Data: -1,
+		}
+	}
+
+	ttl := time.Until(t).Seconds()
+	return &resp.Intiger{
+		Data: int64(math.Round(ttl)),
+	}
 }
 
 func execGet(db kVStore, args [][]byte) resp.RespType {
@@ -149,4 +171,5 @@ func registerCommand(name string, arity int, exec Exec) *command {
 func init() {
 	registerCommand("set", -3, execSet)
 	registerCommand("get", 2, execGet)
+	registerCommand("ttl", 2, execTtl)
 }
