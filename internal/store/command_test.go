@@ -59,7 +59,7 @@ func TestExecSet(t *testing.T) {
 			raw: [][]byte{[]byte("key"), []byte("val"), []byte("xx")},
 		},
 		{
-			name: "SET with xx on non-exisitent key",
+			name: "SET with xx on non-existent key",
 			expected: &resp.Nil{},
 			raw: [][]byte{[]byte("key1"), []byte("val"), []byte("xx")},
 		},
