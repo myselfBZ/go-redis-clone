@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/myselfBZ/go-redis-clone/internal/observabilty"
 )
 
 var (
@@ -292,7 +290,6 @@ func (s *Storage) Set(args SetArgs) bool {
 			delete(s.expiringKeys, args.Key)
 		}
 
-		observabilty.KeysStored.Inc()
 		written = true
 	}
 	s.mu.Unlock()
@@ -351,7 +348,6 @@ func (s *Storage) Persist(key string) bool {
 func (s *Storage) deleteKey(key string) {
 	delete(s.data, key)
 	delete(s.expiringKeys, key)
-	observabilty.KeysStored.Dec()
 }
 
 // under lock only
@@ -365,8 +361,49 @@ func (s *Storage) deleteIfExpired(key string) bool {
 	if time.Now().After(expiresAt) {
 		delete(s.data, key)
 		delete(s.expiringKeys, key)
-		observabilty.KeysStored.Dec()
 		return true
 	}
 	return false
 }
+
+
+// -------- basic ops ---------
+
+func (s *Storage) exists(key string) bool {
+	_, ok := s.data[key]
+	return ok
+}
+
+func (s *Storage) put(key string, val *dataEntity) int {
+	s.data[key] = val
+	return 1
+}
+
+// putIfExists updates the existing key and returns 1, if the key does not exist 
+// it returns 0 and does nothing
+func (s *Storage) putIfExists(key string, val *dataEntity) int {
+	if !s.exists(key) {
+		return 0
+	}
+	_ = s.put(key, val)
+	return 1
+}
+
+// putIfAbsent inserts a new key and returns 1, if the key already exists, 
+// it returns 0 and does nothing
+func (s *Storage) putIfAbsent(key string, val *dataEntity) int {
+	if s.exists(key) {
+		return 0
+	}
+	_ = s.put(key, val)
+	return 1
+}
+
+
+func (s *Storage) expire(key string, at time.Time) {
+	if !s.exists(key) {
+		panic("expire() called on nonexistent key " + key)
+	}
+	s.expiringKeys[key] = at
+}
+

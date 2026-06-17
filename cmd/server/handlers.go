@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-	"net"
 	"strconv"
 	"strings"
 
@@ -10,13 +8,12 @@ import (
 	"github.com/myselfBZ/go-redis-clone/internal/store"
 )
 
-var ErrUnknownStoreType = errors.New("unknown storage level type")
 
-type Handler func(net.Conn, []resp.RespType) resp.Response
+type Handler func([][]byte) resp.Response
 
 var commandHandlers = map[resp.CommandType]Handler{}
 
-func (s *server) handlePing(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handlePing(args [][]byte) resp.Response {
 	return resp.Response{
 		Data: &resp.SimpleStr{
 			Data: []byte("PONG"),
@@ -25,7 +22,7 @@ func (s *server) handlePing(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleGet(args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -34,17 +31,9 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 		}
 	}
 
-	key, ok := args[1].(*resp.BulkStr)
+	key := string(args[1])
 
-	if !ok {
-		return resp.Response{
-			Data: &resp.RespErr{
-				Data: []byte("ERR key must be a bulk string"),
-			},
-		}
-	}
-
-	val, err := s.storage.Get(key.String())
+	val, err := s.storage.Get(key)
 
 	if err != nil {
 		return resp.Response{
@@ -64,7 +53,7 @@ func (s *server) handleGet(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleSet(args [][]byte) resp.Response {
 	if len(args) < 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -75,16 +64,13 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	key, value := args[1], args[2]
 
 	setArgs := store.SetArgs{
-		Key: key.(*resp.BulkStr).String(),
+		Key: string(key),
 	}
 
-	parsedValue := value.(*resp.BulkStr)
-	setArgs.Value = parsedValue.Data
+	setArgs.Value = value
 
 	for i := 3; i < len(args); i++ {
-		bulkStr := args[i].(*resp.BulkStr)
-
-		switch strings.ToUpper(bulkStr.String()) {
+		switch strings.ToUpper(string(args[i])) {
 		case "XX":
 			setArgs.XX = true
 		case "NX":
@@ -99,7 +85,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 				}
 			}
 
-			seconds, err := strconv.Atoi(args[i+1].(*resp.BulkStr).String())
+			seconds, err := strconv.Atoi(string(args[i+1]))
 
 			if err != nil {
 				return resp.Response{
@@ -124,7 +110,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 				}
 			}
 
-			milliseconds, err := strconv.Atoi(args[i+1].(*resp.BulkStr).String())
+			milliseconds, err := strconv.Atoi(string(args[i+1]))
 
 			if err != nil {
 				return resp.Response{
@@ -189,7 +175,7 @@ func (s *server) handleSet(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleTTL(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleTTL( args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -198,7 +184,7 @@ func (s *server) handleTTL(conn net.Conn, args []resp.RespType) resp.Response {
 		}
 	}
 
-	result := s.storage.TTL(args[1].(*resp.BulkStr).String())
+	result := s.storage.TTL(string(args[1]))
 
 	return resp.Response{
 		Data: &resp.Intiger{
@@ -208,7 +194,7 @@ func (s *server) handleTTL(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handlePTTL( args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -218,7 +204,7 @@ func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) resp.Response {
 
 	}
 
-	result := s.storage.PTTL(args[1].(*resp.BulkStr).String())
+	result := s.storage.PTTL(string(args[1]))
 	return resp.Response{
 		Data: &resp.Intiger{
 			Data: result,
@@ -227,7 +213,7 @@ func (s *server) handlePTTL(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleCommandDocs( args [][]byte) resp.Response {
 	return resp.Response{
 		Data: &resp.SimpleStr{
 			Data: []byte("OK"),
@@ -236,15 +222,11 @@ func (s *server) handleCommandDocs(conn net.Conn, args []resp.RespType) resp.Res
 	}
 }
 
-func (s *server) handleDel(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleDel(args [][]byte) resp.Response {
 	var found int64 = 0
 
 	for _, arg := range args[1:] {
-		keyBulkStr, ok := arg.(*resp.BulkStr)
-		if !ok {
-			continue
-		}
-		err := s.storage.Del(keyBulkStr.String())
+		err := s.storage.Del(string(arg))
 		if err == nil {
 			found += 1
 		}
@@ -257,7 +239,7 @@ func (s *server) handleDel(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleExpire(args [][]byte) resp.Response {
 	if len(args) < 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -266,7 +248,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 		}
 	}
 
-	seconds, err := strconv.Atoi(args[2].(*resp.BulkStr).String())
+	seconds, err := strconv.Atoi(string(args[2]))
 
 	if err != nil {
 		return resp.Response{
@@ -276,14 +258,12 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 		}
 	}
 	expireArgs := store.ExpireArgs{
-		Key:     args[1].(*resp.BulkStr).String(),
+		Key:     string(args[1]),
 		Seconds: seconds,
 	}
 
 	for i := 3; i < len(args); i++ {
-		bulkStr := args[i].(*resp.BulkStr)
-
-		switch strings.ToUpper(bulkStr.String()) {
+		switch strings.ToUpper(string(args[i])) {
 		case "XX":
 			expireArgs.XX = true
 		case "NX":
@@ -321,7 +301,7 @@ func (s *server) handleExpire(conn net.Conn, args []resp.RespType) resp.Response
 	}
 }
 
-func (s *server) handlePersist(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handlePersist( args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -330,7 +310,7 @@ func (s *server) handlePersist(conn net.Conn, args []resp.RespType) resp.Respons
 		}
 	}
 
-	written := s.storage.Persist(args[1].(*resp.BulkStr).String())
+	written := s.storage.Persist(string(args[1]))
 
 	if !written {
 		return resp.Response{
@@ -349,7 +329,7 @@ func (s *server) handlePersist(conn net.Conn, args []resp.RespType) resp.Respons
 	}
 }
 
-func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleDecr(args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -358,9 +338,9 @@ func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
 		}
 	}
 
-	key := args[1].(*resp.BulkStr)
+	key := args[1]
 
-	val, err := s.storage.Decr(key.String())
+	val, err := s.storage.Decr(string(key))
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -376,7 +356,7 @@ func (s *server) handleDecr(conn net.Conn, args []resp.RespType) resp.Response {
 	}
 }
 
-func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleIncrBy(args [][]byte) resp.Response {
 	if len(args) != 3 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -385,9 +365,9 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 		}
 	}
 
-	key := args[1].(*resp.BulkStr)
-	incrBy := args[2].(*resp.BulkStr)
-	integer, err := strconv.ParseInt(incrBy.String(), 10, 64)
+	key := args[1]
+	incrBy := args[2]
+	integer, err := strconv.ParseInt(string(incrBy), 10, 64)
 
 	if err != nil {
 		return resp.Response{
@@ -397,7 +377,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 		}
 	}
 
-	val, err := s.storage.IncrBy(key.String(), integer)
+	val, err := s.storage.IncrBy(string(key), integer)
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -413,7 +393,7 @@ func (s *server) handleIncrBy(conn net.Conn, args []resp.RespType) resp.Response
 	}
 }
 
-func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
+func (s *server) handleIncr(args [][]byte) resp.Response {
 	if len(args) != 2 {
 		return resp.Response{
 			Data: &resp.RespErr{
@@ -422,9 +402,9 @@ func (s *server) handleIncr(conn net.Conn, args []resp.RespType) resp.Response {
 		}
 	}
 
-	key := args[1].(*resp.BulkStr)
+	key := args[1]
 
-	val, err := s.storage.Incr(key.String())
+	val, err := s.storage.Incr(string(key))
 	if err != nil {
 		return resp.Response{
 			Data: &resp.RespErr{

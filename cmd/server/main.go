@@ -14,9 +14,7 @@ import (
 	"time"
 
 	"net/http"
-	"runtime"
 
-	"github.com/myselfBZ/go-redis-clone/internal/observabilty"
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -71,16 +69,6 @@ func (s *server) run() error {
 	}
 
 	s.ln = ln
-
-	// heap watch
-	go func() {
-		for {
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-			observabilty.MemoryUsage.Set(float64(m.Alloc))
-			time.Sleep(time.Millisecond * 500)
-		}
-	}()
 
 	go func () { 
 		if err := s.accept(); err != nil {
@@ -138,10 +126,8 @@ func (s *server) handle(conn net.Conn) {
 	defer func() {
 		slog.Info("Closing client connection")
 		s.closeClient(conn)
-		observabilty.ActiveConnections.Dec()
 	}()
 
-	observabilty.ActiveConnections.Inc()
 	for {
 		command, err := resp.Parse(conn)
 
@@ -165,40 +151,25 @@ func (s *server) handle(conn net.Conn) {
 		}
 
 		args := command.Args()
-		switch c := args[0].(type) {
 
-		case *resp.BulkStr:
 
-			handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(c.String()))]
-			if !ok {
-				respErr := resp.RespErr{
-					Data: []byte("invalid command"),
-				}
-				conn.Write(respErr.ToBytes())
-				continue
-			}
-
-			res := metricsMiddleWare(metricsMiddeleWareArgs{
-				Conn:    conn,
-				Args:    args,
-				Handler: handler,
-			})
-
-			if _, err := conn.Write(res.Data.ToBytes()); err != nil {
-				slog.Error("connection write error", "err", err)
-				return
-			}
-
-		default:
+		handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(string(args[0])))]
+		if !ok {
 			respErr := resp.RespErr{
-				Data: []byte("invalid protocol"),
+				Data: []byte("invalid command"),
 			}
-			if _, err := conn.Write(respErr.ToBytes()); err != nil {
-				slog.Error("connection write error", "err", err)
-				return
-			}
+			conn.Write(respErr.ToBytes())
+			continue
+		}
+
+		res :=  handler(args)
+
+		if _, err := conn.Write(res.Data.ToBytes()); err != nil {
+			slog.Error("connection write error", "err", err)
+			return
 		}
 	}
+
 }
 
 func main() {

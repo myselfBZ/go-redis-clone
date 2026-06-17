@@ -16,7 +16,7 @@ var (
 )
 
 var (
-	CRLF = []byte("\r\n")
+	CRLF = "\r\n"
 )
 
 const (
@@ -38,11 +38,11 @@ const (
 type CommandType string
 
 type Command struct {
-	arr *RespArray
+	arr *RespBulkStrArr
 }
 
-func (c *Command) Args() []RespType {
-	return c.arr.elements
+func (c *Command) Args() [][]byte {
+	return c.arr.data
 }
 
 type Response struct {
@@ -74,7 +74,7 @@ func Parse(reader io.Reader) (*Command, error) {
 		return nil, err
 	}
 
-	args := &RespArray{}
+	args := &RespBulkStrArr{}
 
 	for i := 0; i < numArgs; i++ {
 		line, err := bufReader.ReadBytes('\n')
@@ -102,11 +102,7 @@ func Parse(reader io.Reader) (*Command, error) {
 			return nil, err
 		}
 
-		args.Append(
-			&BulkStr{
-				Data: arg,
-			},
-		)
+		args.Append(arg)
 
 		end, err := bufReader.ReadBytes('\n')
 

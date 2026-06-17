@@ -58,10 +58,8 @@ func TestParseCommand(t *testing.T) {
 	
 	require.Equal(t, 1,command.arr.Length())
 
-	bulkStr, ok := command.arr.elements[0].(*BulkStr)
-	require.True(t, ok)
-	require.Equal(t, []byte("SET"), bulkStr.Data)
-
+	bulkStr := command.arr.data[0]
+	require.Equal(t, []byte("SET"), bulkStr)
 
 	reader = &chunkReader{
 		data: "*1\r\n$3\r\nSETTLE\r\n",
