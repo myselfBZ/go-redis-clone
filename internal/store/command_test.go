@@ -7,13 +7,44 @@ import (
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
+type suite struct {
+	name string
+	expected resp.RespType
+	raw [][]byte
+}
+
+func TestGet(t *testing.T) {
+	db := NewStorage()
+
+	db.put("hello", &dataEntity{
+		val: []byte("world"),
+	})
+
+	tests := []suite{
+		{
+			name: "GET exisiting key",
+			raw: [][]byte{[]byte("hello")},
+			expected: &resp.BulkStr{
+				Data: []byte("world"),
+			},
+
+		},
+		{
+			name: "GET non-existent key",
+			raw: [][]byte{[]byte("key")},
+			expected: &resp.Nil{},
+		},
+	}
+	for _, test := range tests {
+		rep := execGet(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+}
+
 func TestExecSet(t *testing.T) {
 	db := NewStorage()
-	type suite struct {
-		name string
-		expected resp.RespType
-		raw [][]byte
-	}
 
 	tests := []suite{
 		{
@@ -63,7 +94,7 @@ func TestExecSet(t *testing.T) {
 	for _, test := range tests {
 		rep := execSet(db, test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
-			t.Fatalf("%s. response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
 	}
 }

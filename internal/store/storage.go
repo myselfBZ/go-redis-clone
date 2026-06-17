@@ -6,12 +6,23 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
 var (
-	ErrNotFound  = errors.New("key not found")
+	ErrNotFound   = errors.New("key not found")
 	ErrNotInteger = errors.New("value is not an intiger")
 )
+
+// it's for the command executors, for now...
+type kVStore interface {
+	put(key string, val *dataEntity) int
+	putIfExists(key string, val *dataEntity) int
+	expire(key string, at time.Time)
+	putIfAbsent(key string, val *dataEntity) int
+	get(key string) (*dataEntity, bool)
+}
 
 func NewStorage() *Storage {
 	s := &Storage{
@@ -71,6 +82,21 @@ type Storage struct {
 	expiringKeys map[string]time.Time
 }
 
+
+func (s *Storage) Exec(cmd [][]byte) resp.RespType {
+	name := string(cmd[0])
+	c, ok := cmdTable[name]
+	if !ok {
+		return resp.MakeErr("ERR invalid command")
+	}
+
+	if !validArity(c.arity, len(cmd[1:])) {
+		return resp.ArgNumErr(name)
+	}
+
+	return c.exec(s, cmd[1:])
+}
+
 func (s *Storage) Close() {
 	s.janitor.exit <- struct{}{}
 }
@@ -87,7 +113,7 @@ func (s *Storage) PTTL(key string) int64 {
 
 	if !hasExpire && !existsInCache {
 		return -2
-	}	
+	}
 
 	if !hasExpire && existsInCache {
 		return -1
@@ -136,7 +162,7 @@ func (s *Storage) Decr(key string) (int64, error) {
 	val := entity.val.([]byte)
 
 	validInt, err := strconv.ParseInt(string(val), 10, 64)
-	
+
 	if err != nil {
 		return 0, ErrNotInteger
 	}
@@ -161,7 +187,7 @@ func (s *Storage) IncrBy(key string, by int64) (int64, error) {
 	val := entity.val.([]byte)
 
 	validInt, err := strconv.ParseInt(string(val), 10, 64)
-	
+
 	if err != nil {
 		return 0, ErrNotInteger
 	}
@@ -187,7 +213,7 @@ func (s *Storage) Incr(key string) (int64, error) {
 	val := entity.val.([]byte)
 
 	validInt, err := strconv.ParseInt(string(val), 10, 64)
-	
+
 	if err != nil {
 		return 0, ErrNotInteger
 	}
@@ -198,7 +224,6 @@ func (s *Storage) Incr(key string) (int64, error) {
 
 	return validInt, nil
 }
-
 
 func (s *Storage) deleteExpired() {
 	expiredKeys := []string{}
@@ -275,7 +300,6 @@ func (s *Storage) Set(args SetArgs) bool {
 			val: args.Value,
 		}
 
-
 		if args.EX > 0 {
 			expiresAt := time.Now().Add(time.Duration(args.EX) * time.Second)
 			s.expiringKeys[args.Key] = expiresAt
@@ -286,7 +310,7 @@ func (s *Storage) Set(args SetArgs) bool {
 			s.expiringKeys[args.Key] = expiresAt
 		}
 
-		if args.PX == 0 && args.EX == 0 && hasExpiration{
+		if args.PX == 0 && args.EX == 0 && hasExpiration {
 			delete(s.expiringKeys, args.Key)
 		}
 
@@ -324,7 +348,6 @@ func (s *Storage) Del(key string) error {
 	return nil
 }
 
-
 func (s *Storage) Persist(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -336,7 +359,7 @@ func (s *Storage) Persist(key string) bool {
 	}
 
 	// already expired
-	if hasTTL && s.deleteIfExpired(key){
+	if hasTTL && s.deleteIfExpired(key) {
 		return false
 	}
 
@@ -366,6 +389,18 @@ func (s *Storage) deleteIfExpired(key string) bool {
 	return false
 }
 
+func (s *Storage) deleteIfExpired0(key string) {
+	expiresAt, ok := s.expiringKeys[key]
+
+	if !ok {
+		return
+	}
+
+	if time.Now().After(expiresAt) {
+		delete(s.data, key)
+		delete(s.expiringKeys, key)
+	}
+}
 
 // -------- basic ops ---------
 
@@ -374,12 +409,18 @@ func (s *Storage) exists(key string) bool {
 	return ok
 }
 
+func (s *Storage) get(key string) (*dataEntity, bool) {
+	s.deleteIfExpired(key)
+	en, ok := s.data[key]
+	return en, ok
+}
+
 func (s *Storage) put(key string, val *dataEntity) int {
 	s.data[key] = val
 	return 1
 }
 
-// putIfExists updates the existing key and returns 1, if the key does not exist 
+// putIfExists updates the existing key and returns 1, if the key does not exist
 // it returns 0 and does nothing
 func (s *Storage) putIfExists(key string, val *dataEntity) int {
 	if !s.exists(key) {
@@ -389,7 +430,7 @@ func (s *Storage) putIfExists(key string, val *dataEntity) int {
 	return 1
 }
 
-// putIfAbsent inserts a new key and returns 1, if the key already exists, 
+// putIfAbsent inserts a new key and returns 1, if the key already exists,
 // it returns 0 and does nothing
 func (s *Storage) putIfAbsent(key string, val *dataEntity) int {
 	if s.exists(key) {
@@ -399,11 +440,9 @@ func (s *Storage) putIfAbsent(key string, val *dataEntity) int {
 	return 1
 }
 
-
 func (s *Storage) expire(key string, at time.Time) {
 	if !s.exists(key) {
 		panic("expire() called on nonexistent key " + key)
 	}
 	s.expiringKeys[key] = at
 }
-

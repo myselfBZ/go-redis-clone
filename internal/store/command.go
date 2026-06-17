@@ -11,15 +11,26 @@ import (
 
 var cmdTable = map[string]*command{}
 
-type Exec func(db *Storage, args [][]byte) resp.RespType
+type Exec func(db kVStore, args [][]byte) resp.RespType
 
 type command struct {
 	arity int
 	exec Exec
 }
 
+func execGet(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+	data, ok := db.get(key)
+	if !ok {
+		return &resp.Nil{}
+	}
+	payload := data.val.([]byte)
+	return &resp.BulkStr{
+		Data: payload,
+	}
+}
 
-func execSet(db *Storage, args [][]byte) resp.RespType {
+func execSet(db kVStore, args [][]byte) resp.RespType {
 
 	key, val := string(args[0]), args[1]
 
@@ -137,4 +148,5 @@ func registerCommand(name string, arity int, exec Exec) *command {
 
 func init() {
 	registerCommand("set", -3, execSet)
+	registerCommand("get", 2, execGet)
 }
