@@ -12,11 +12,32 @@ import (
 
 var cmdTable = map[string]*command{}
 
-type Exec func(db kVStore, args [][]byte) resp.RespType
+type execCmd func(db kVStore, args [][]byte) resp.RespType
 
 type command struct {
 	arity int
-	exec Exec
+	exec execCmd
+}
+
+func execPtl(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+	_, ok := db.get(key)
+	if !ok {
+		return &resp.Intiger{
+			Data: -2,
+		}
+	}
+	t, ok := db.getExpiresAt(key)
+	if !ok {
+		return &resp.Intiger{
+			Data: -1,
+		}
+	}
+
+	ttl := time.Until(t).Milliseconds()
+	return &resp.Intiger{
+		Data: ttl,
+	}
 }
 
 func execTtl(db kVStore, args [][]byte) resp.RespType {
@@ -158,7 +179,7 @@ func abs(x int) int {
 }
 
 
-func registerCommand(name string, arity int, exec Exec) *command {
+func registerCommand(name string, arity int, exec execCmd) *command {
 	c := &command{
 		arity: arity,
 		exec: exec,
