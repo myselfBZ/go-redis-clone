@@ -178,3 +178,41 @@ func TestExecSet(t *testing.T) {
 		}
 	}
 }
+
+func TestExecDel(t *testing.T) {
+	db := NewStorage()
+	db.put("key", &dataEntity{
+		val: []byte("value"),
+	})
+	db.put("key1", &dataEntity{
+		val: []byte("value"),
+	})
+	db.put("key2", &dataEntity{
+		val: []byte("value"),
+	})
+
+	tests := []suite{
+		{
+			name: "DEL on multiple keys",
+			expected: &resp.Intiger{Data: 2},
+			raw: [][]byte{[]byte("key1"), []byte("key2")},
+		},
+		{
+			name: "DEL on non-existent key",
+			expected: &resp.Intiger{Data: 0},
+			raw: [][]byte{[]byte("invalid")},
+		},
+		{
+			name: "DEL on existing key",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key")},
+		},
+	}
+	
+	for _, test := range tests {
+		rep := execDel(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+}

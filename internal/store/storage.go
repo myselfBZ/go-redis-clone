@@ -19,6 +19,7 @@ var (
 // it's for the command executors, for now...
 type kVStore interface {
 	put(key string, val *dataEntity) int
+	remove(key string) int
 	putIfExists(key string, val *dataEntity) int
 	expire(key string, at time.Time)
 	putIfAbsent(key string, val *dataEntity) int
@@ -449,6 +450,17 @@ func (s *Storage) putIfAbsent(key string, val *dataEntity) int {
 func (s *Storage) getExpiresAt(key string) (time.Time, bool) {
 	t, ok := s.expiringKeys[key]
 	return t, ok
+}
+
+// remove deletes a key, it retuns 1 on success and 0 if the key does not exist 
+func (s *Storage) remove(key string) int {
+	s.deleteIfExpired0(key)
+	_, ok := s.data[key]
+	if !ok {
+		return 0
+	}
+	delete(s.data, key)
+	return 1
 }
 
 func (s *Storage) expire(key string, at time.Time) {

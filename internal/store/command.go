@@ -40,6 +40,19 @@ func execPtl(db kVStore, args [][]byte) resp.RespType {
 	}
 }
 
+func execDel(db kVStore, args [][]byte) resp.RespType {
+	result := 0
+
+	for _, k := range args {
+		r := db.remove(string(k))
+		result += r
+	}
+
+	return &resp.Intiger{
+		Data: int64(result),
+	}
+}
+
 func execTtl(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	_, ok := db.get(key)
@@ -193,4 +206,6 @@ func init() {
 	registerCommand("set", -3, execSet)
 	registerCommand("get", 2, execGet)
 	registerCommand("ttl", 2, execTtl)
+	registerCommand("pttl", 2, execPtl)
+	registerCommand("del", -2, execDel)
 }
