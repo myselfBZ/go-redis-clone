@@ -46,7 +46,51 @@ func TestExec(t *testing.T) {
 		}
 	}
 }
+func TestPersist(t *testing.T) {
+	db := NewStorage()
+	raw := [][]byte{
+		[]byte("SET"), 
+		[]byte("key"),
+		[]byte("val"),
+		[]byte("EX"),
+		[]byte("1"),
+	}
 
+	db.Exec(raw)
+
+	res := execPersist(db, [][]byte{[]byte("key")})
+	exp := &resp.Intiger{Data: 1}	
+	if !slices.Equal(res.ToBytes(), exp.ToBytes()) {
+		t.Fatalf("Response did not match. got '%q', want '%q'", string(res.ToBytes()), string(exp.ToBytes()))
+	}
+
+	// expiration
+	time.Sleep(time.Second)
+
+	res = execPersist(db, [][]byte{[]byte("key")})
+	exp = &resp.Intiger{Data: 0}	
+	if !slices.Equal(res.ToBytes(), exp.ToBytes()) {
+		t.Fatalf("Response did not match. got '%q', want '%q'", string(res.ToBytes()), string(exp.ToBytes()))
+	}
+
+
+	// persisting a key that does not have a TTL
+	raw = [][]byte{
+		[]byte("SET"), 
+		[]byte("key"),
+		[]byte("val"),
+		[]byte("ex"),
+	}
+
+	db.Exec(raw)
+
+	res = execPersist(db, [][]byte{[]byte("key")})
+	exp = &resp.Intiger{Data: 0}	
+	if !slices.Equal(res.ToBytes(), exp.ToBytes()) {
+		t.Fatalf("Response did not match. got '%q', want '%q'", string(res.ToBytes()), string(exp.ToBytes()))
+	}
+
+}
 
 func TestTTL(t *testing.T) {
 	db := NewStorage()
