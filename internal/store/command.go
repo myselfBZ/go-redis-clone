@@ -9,14 +9,13 @@ import (
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
-
 var cmdTable = map[string]*command{}
 
 type execCmd func(db kVStore, args [][]byte) resp.RespType
 
 type command struct {
 	arity int
-	exec execCmd
+	exec  execCmd
 }
 
 func execPtl(db kVStore, args [][]byte) resp.RespType {
@@ -48,6 +47,14 @@ func execDel(db kVStore, args [][]byte) resp.RespType {
 		result += r
 	}
 
+	return &resp.Intiger{
+		Data: int64(result),
+	}
+}
+
+func execPersist(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+	result := db.persist(key)
 	return &resp.Intiger{
 		Data: int64(result),
 	}
@@ -176,12 +183,11 @@ func execSet(db kVStore, args [][]byte) resp.RespType {
 	return &resp.Nil{}
 }
 
-
 func validArity(arity int, actual int) bool {
 	if arity > 0 {
 		return arity == actual
 	}
-	return actual >= abs(arity) 
+	return actual >= abs(arity)
 }
 
 func abs(x int) int {
@@ -191,14 +197,13 @@ func abs(x int) int {
 	return x
 }
 
-
 func registerCommand(name string, arity int, exec execCmd) *command {
 	c := &command{
 		arity: arity,
-		exec: exec,
+		exec:  exec,
 	}
 
-	cmdTable[name] = c	
+	cmdTable[name] = c
 	return c
 }
 
@@ -208,4 +213,5 @@ func init() {
 	registerCommand("ttl", 2, execTtl)
 	registerCommand("pttl", 2, execPtl)
 	registerCommand("del", -2, execDel)
+	registerCommand("persist", 2, execPersist)
 }

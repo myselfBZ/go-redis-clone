@@ -21,9 +21,9 @@ type kVStore interface {
 	put(key string, val *dataEntity) int
 	remove(key string) int
 	putIfExists(key string, val *dataEntity) int
-	expire(key string, at time.Time)
+	expire(key string, at time.Time) int
+	persist(key string) int
 	putIfAbsent(key string, val *dataEntity) int
-	// returns ms
 	getExpiresAt(key string) (time.Time, bool)
 	get(key string) (*dataEntity, bool)
 }
@@ -396,6 +396,7 @@ func (s *Storage) deleteIfExpired(key string) bool {
 	return false
 }
 
+// replacement for deleteIfExpired()
 func (s *Storage) deleteIfExpired0(key string) {
 	expiresAt, ok := s.expiringKeys[key]
 
@@ -455,17 +456,40 @@ func (s *Storage) getExpiresAt(key string) (time.Time, bool) {
 // remove deletes a key, it retuns 1 on success and 0 if the key does not exist 
 func (s *Storage) remove(key string) int {
 	s.deleteIfExpired0(key)
-	_, ok := s.data[key]
-	if !ok {
+
+	if !s.exists(key) {
 		return 0
 	}
+
 	delete(s.data, key)
 	return 1
 }
 
-func (s *Storage) expire(key string, at time.Time) {
+// persist deletes the key from the expiringKeys map
+// retuns 1 if the key has expiration, 0 if it does not
+func (s *Storage) persist(key string) int {
+	s.deleteIfExpired0(key)
+
 	if !s.exists(key) {
-		panic("expire() called on nonexistent key " + key)
+		return 0
+	}
+
+	_, ok := s.expiringKeys[key]
+	if !ok {
+		return 0
+	}
+	delete(s.expiringKeys, key)
+	return 1
+}
+
+// expire sets an expiration on the specified key,
+// returns 1 if the key exists, 0 if it does not
+func (s *Storage) expire(key string, at time.Time) int {
+	s.deleteIfExpired0(key)
+
+	if !s.exists(key) {
+		return 0
 	}
 	s.expiringKeys[key] = at
+	return 1
 }
