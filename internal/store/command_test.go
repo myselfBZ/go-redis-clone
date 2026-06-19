@@ -485,3 +485,66 @@ func TestExecDel(t *testing.T) {
 		}
 	}
 }
+
+
+func TestExpire(t *testing.T) {
+	db := NewStorage()
+	db.put("key", &dataEntity{
+		val: []byte("val"),
+	})
+
+	tests := []suite{
+		{
+			name: "EXPIRE on exisiting key no options",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key"), []byte("10")},
+		}, 
+		{
+			name: "EXPIRE on on non-existent key, no options",
+			expected: &resp.Intiger{Data: 0},
+			raw: [][]byte{[]byte("key1"), []byte("10")},
+		},
+
+		// this should delete the key
+		{
+			name: "EXPIRE with XX",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key"), []byte("0"), []byte("XX")},
+		},
+	}
+	for _, test := range tests {
+		rep := execExpire(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+	_, ok := db.get("key")
+	if ok {
+		t.Fatalf("EXPIRE with XX did not delete the key")
+	}
+
+	db.put("key", &dataEntity{
+		val: []byte("val"),
+	})
+
+	testWithOptions := []suite{
+		{
+			name: "EXPIRE with NX",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key"), []byte("10"), []byte("NX")},
+		},
+	}
+
+	for _, test := range testWithOptions {
+		rep := execExpire(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+}
+
+
+
+
+
+

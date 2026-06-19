@@ -18,6 +18,88 @@ type command struct {
 	exec  execCmd
 }
 
+func execExpire(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+	seconds, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	incompatibleErr := resp.MakeErr("ERR NX and XX, GT or LT options at the same time are not compatible")
+
+	opt := ""
+
+	for i := 2; i < len(args); i++ {
+		switch strings.ToUpper(string(args[i])) {
+		case "NX":
+			if opt != "" {
+				return incompatibleErr 
+			}
+			opt = "NX"
+
+		case "XX":
+			if opt != "" {
+				return incompatibleErr
+			}
+			opt = "XX" 
+
+		case "GT":
+			if opt != "" {
+				return incompatibleErr
+			}
+
+			opt = "GT"
+		case "LT":
+			if opt != "" {
+				return incompatibleErr
+			}
+
+			opt = "LT"
+		default:
+			return resp.SyntaxErr()
+		}
+	}
+	result := &resp.Intiger{Data: 0}
+
+	_, ok := db.get(key)
+
+	if ok {
+		newExpiry := time.Now().Add(time.Duration(seconds) * time.Second)
+		at, expires := db.getExpiresAt(key)
+
+		if opt == "" {
+			db.expire(key, newExpiry)
+			result.Data = 1
+		}
+
+		if opt == "NX" && !expires {
+			db.expire(key, newExpiry)
+			result.Data = 1
+		}  
+
+		if opt == "XX" && expires {
+			db.expire(key, newExpiry)
+			result.Data = 1
+		}  
+
+		if opt == "GT" && (newExpiry.Sub(at).Milliseconds() > 0) {
+			db.expire(key, newExpiry)
+			result.Data = 1
+		} 
+
+		if opt == "LT" && (newExpiry.Sub(at).Milliseconds() < 0) {
+			db.expire(key, newExpiry)
+			result.Data = 1
+		}
+
+		return result
+	}
+
+	return &resp.Intiger{
+		Data: 0,
+	}
+}
+
 func execDecrBy(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 
@@ -266,6 +348,8 @@ func execSet(db kVStore, args [][]byte) resp.RespType {
 				}
 				ttl = ttlVal * 1000
 				i++
+			default:
+				return resp.SyntaxErr()
 			}
 		}
 	}
@@ -329,4 +413,5 @@ func init() {
 	registerCommand("decr", 2, execDecr)
 	registerCommand("incrby", 3, execIncrBy)
 	registerCommand("decrby", 3, execDecrBy)
+	registerCommand("expire", -3, execExpire)
 }
