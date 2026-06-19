@@ -167,6 +167,50 @@ func TestGet(t *testing.T) {
 	}
 }
 
+
+func TestExecIncr(t *testing.T) {
+	db := NewStorage()
+	nonIntKey := "nonInt"
+	nonIntVal := &dataEntity{
+		val: []byte("nonInt"),
+	}
+
+	db.put(nonIntKey, nonIntVal)
+
+	key := "key"
+	val := &dataEntity{
+		val: []byte("1"),
+	}
+
+	db.put(key, val)
+
+	tests := []suite{
+		{
+			name: "INCR on non-existent key",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key1")},
+		},
+		{
+			name: "INCR on valid key",
+			expected: &resp.Intiger{Data: 2},
+			raw: [][]byte{[]byte("key")},
+		},
+		{
+			name: "INCR on non-intiger key",
+			expected: resp.NotInErr(),
+			raw: [][]byte{[]byte(nonIntKey)},
+		},
+	}
+
+	for _, test := range tests {
+		rep := execIncr(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+
+}
+
 func TestExecSet(t *testing.T) {
 	db := NewStorage()
 

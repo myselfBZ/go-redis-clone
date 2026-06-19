@@ -9,6 +9,12 @@ func MakeErr(msg string) *RespErr {
 	}
 }
 
+func NotInErr() *RespErr {
+	return &RespErr{
+		Data: []byte("ERR value is not an integer or out of range"),
+	}
+}
+
 func ArgNumErr(cmd string) *RespErr {
 	msg := fmt.Sprintf("ERR wrong number of arguments to '%s'", cmd)
 	return &RespErr{
