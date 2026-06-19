@@ -81,6 +81,30 @@ func execTtl(db kVStore, args [][]byte) resp.RespType {
 	}
 }
 
+func execDecr(db kVStore, args[][]byte) resp.RespType {
+	key := string(args[0])
+	d, ok := db.get(key)
+	if !ok {
+		db.put(key, &dataEntity{
+			val: []byte("-1"),
+		})
+		return &resp.Intiger{Data: -1}
+	}
+
+	// TODO: caution with type cast, as new types (lists, hashes) might be introduced
+	intVal, err := strconv.ParseInt(string(d.val.([]byte)), 10, 64)
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	intVal--
+
+	d.val = []byte(strconv.FormatInt(intVal, 10))
+	return &resp.Intiger{
+		Data: intVal,
+	}
+}
+
 func execIncr(db kVStore, args[][]byte) resp.RespType {
 	key := string(args[0])
 	d, ok := db.get(key)
@@ -91,7 +115,7 @@ func execIncr(db kVStore, args[][]byte) resp.RespType {
 		return &resp.Intiger{Data: 1}
 	}
 
-	// TODO: caution with type case, as new types (lists, hashes) might be introduced
+	// TODO: caution with type cast, as new types (lists, hashes) might be introduced
 	intVal, err := strconv.ParseInt(string(d.val.([]byte)), 10, 64)
 	if err != nil {
 		return resp.NotInErr()
@@ -239,4 +263,5 @@ func init() {
 	registerCommand("del", -2, execDel)
 	registerCommand("persist", 2, execPersist)
 	registerCommand("incr", 2, execIncr)
+	registerCommand("decr", 2, execDecr)
 }

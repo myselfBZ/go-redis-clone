@@ -2,6 +2,7 @@ package store
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -94,15 +95,11 @@ func TestPersist(t *testing.T) {
 
 func TestTTL(t *testing.T) {
 	db := NewStorage()
-	raw := [][]byte{
-		[]byte("SET"), 
-		[]byte("key"),
-		[]byte("val"),
-		[]byte("EX"),
-		[]byte("1"),
-	}
 
-	db.Exec(raw)
+	db.put("key", &dataEntity{
+		val: []byte("val"),
+	})
+	db.expire("key", time.Now().Add(time.Second))
 
 	res := execTtl(db, [][]byte{[]byte("key")})
 	exp := &resp.Intiger{Data: 1}	
@@ -121,13 +118,9 @@ func TestTTL(t *testing.T) {
 
 
 	// expecting -1
-	raw = [][]byte{
-		[]byte("SET"), 
-		[]byte("key"),
-		[]byte("val"),
-	}
-
-	db.Exec(raw)
+	db.put("key", &dataEntity{
+		val: []byte("val"),
+	})
 
 	res = execTtl(db, [][]byte{[]byte("key")})
 	exp = &resp.Intiger{Data: -1}	
@@ -166,7 +159,62 @@ func TestGet(t *testing.T) {
 		}
 	}
 }
+func TestExecDecr(t *testing.T) {
+	db := NewStorage()
+	nonIntKey := "nonInt"
+	nonIntVal := &dataEntity{
+		val: []byte("nonInt"),
+	}
 
+	db.put(nonIntKey, nonIntVal)
+
+	key := "key"
+	val := &dataEntity{
+		val: []byte("2"),
+	}
+
+	db.put(key, val)
+
+	tests := []suite{
+		{
+			name: "DECR on non-existent key",
+			expected: &resp.Intiger{Data: -1},
+			raw: [][]byte{[]byte("key1")},
+		},
+		{
+			name: "DECR on valid key",
+			expected: &resp.Intiger{Data: 1},
+			raw: [][]byte{[]byte("key")},
+		},
+		{
+			name: "DECR on non-intiger key",
+			expected: resp.NotInErr(),
+			raw: [][]byte{[]byte(nonIntKey)},
+		},
+	}
+
+	for _, test := range tests {
+		rep := execDecr(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+	en, ok := db.get(key)
+	if !ok {
+		t.Fatalf("fetching the incremented key failed, key does not exist")
+	}
+	v, ok := en.val.([]byte)
+	if !ok {
+		t.Fatalf("expected []byte, got %T", en.val)
+	}
+	intV, err := strconv.ParseInt(string(v), 10, 64)
+	if err != nil {
+		t.Fatalf("expected valid int, got %s", string(v))
+	}
+	if intV != 1 {
+		t.Fatalf("expected 1, got %d", intV)
+	}
+}
 
 func TestExecIncr(t *testing.T) {
 	db := NewStorage()
@@ -208,7 +256,21 @@ func TestExecIncr(t *testing.T) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
 	}
-
+	en, ok := db.get(key)
+	if !ok {
+		t.Fatalf("fetching the incremented key failed, key does not exist")
+	}
+	v, ok := en.val.([]byte)
+	if !ok {
+		t.Fatalf("expected []byte, got %T", en.val)
+	}
+	intV, err := strconv.ParseInt(string(v), 10, 64)
+	if err != nil {
+		t.Fatalf("expected valid int, got %s", string(v))
+	}
+	if intV != 2 {
+		t.Fatalf("expected 2, got %d", intV)
+	}
 }
 
 func TestExecSet(t *testing.T) {
