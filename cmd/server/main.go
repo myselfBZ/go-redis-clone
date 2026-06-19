@@ -152,19 +152,9 @@ func (s *server) handle(conn net.Conn) {
 
 		args := command.Args()
 
+		res := s.storage.Exec(args)
 
-		handler, ok := commandHandlers[resp.CommandType(strings.ToUpper(string(args[0])))]
-		if !ok {
-			respErr := resp.RespErr{
-				Data: []byte("invalid command"),
-			}
-			conn.Write(respErr.ToBytes())
-			continue
-		}
-
-		res :=  handler(args)
-
-		if _, err := conn.Write(res.Data.ToBytes()); err != nil {
+		if _, err := conn.Write(res.ToBytes()); err != nil {
 			slog.Error("connection write error", "err", err)
 			return
 		}
