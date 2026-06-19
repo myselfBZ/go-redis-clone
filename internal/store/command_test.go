@@ -216,6 +216,125 @@ func TestExecDecr(t *testing.T) {
 	}
 }
 
+func TestDecrBy(t *testing.T) {
+	db := NewStorage()
+	nonIntKey := "nonInt"
+	nonIntVal := &dataEntity{
+		val: []byte("nonInt"),
+	}
+
+	db.put(nonIntKey, nonIntVal)
+
+	key := "key"
+	val := &dataEntity{
+		val: []byte("1"),
+	}
+
+	db.put(key, val)
+
+	tests := []suite{
+		{
+			name: "DECRBY with negative value",
+			expected: &resp.Intiger{Data: 67},
+			raw: [][]byte{[]byte("negative"), []byte("-67")},
+		},
+		{
+			name: "DECRBY on non-existent key",
+			expected: &resp.Intiger{Data: -67},
+			raw: [][]byte{[]byte("key1"), []byte("67")},
+		},
+		{
+			name: "DECRBY on valid key",
+			expected: &resp.Intiger{Data: -1},
+			raw: [][]byte{[]byte("key"), []byte("2")},
+		},
+		{
+			name: "DECRBY on non-intiger key",
+			expected: resp.NotInErr(),
+			raw: [][]byte{[]byte(nonIntKey), []byte("15")},
+		},
+	}
+
+	for _, test := range tests {
+		rep := execDecrBy(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+	en, ok := db.get(key)
+	if !ok {
+		t.Fatalf("fetching the incremented key failed, key does not exist")
+	}
+	v, ok := en.val.([]byte)
+	if !ok {
+		t.Fatalf("expected []byte, got %T", en.val)
+	}
+	intV, err := strconv.ParseInt(string(v), 10, 64)
+	if err != nil {
+		t.Fatalf("expected valid int, got %s", string(v))
+	}
+	if intV != -1 {
+		t.Fatalf("expected -1, got %d", intV)
+	}
+}
+
+func TestExecIncrBy(t *testing.T) {
+	db := NewStorage()
+	nonIntKey := "nonInt"
+	nonIntVal := &dataEntity{
+		val: []byte("nonInt"),
+	}
+
+	db.put(nonIntKey, nonIntVal)
+
+	key := "key"
+	val := &dataEntity{
+		val: []byte("1"),
+	}
+
+	db.put(key, val)
+
+	tests := []suite{
+		{
+			name: "INCRBY on non-existent key",
+			expected: &resp.Intiger{Data: 67},
+			raw: [][]byte{[]byte("key1"), []byte("67")},
+		},
+		{
+			name: "INCRBY on valid key",
+			expected: &resp.Intiger{Data: 67},
+			raw: [][]byte{[]byte("key"), []byte("66")},
+		},
+		{
+			name: "INCRBY on non-intiger key",
+			expected: resp.NotInErr(),
+			raw: [][]byte{[]byte(nonIntKey), []byte("15")},
+		},
+	}
+
+	for _, test := range tests {
+		rep := execIncrBy(db, test.raw)
+		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
+			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
+		}
+	}
+	en, ok := db.get(key)
+	if !ok {
+		t.Fatalf("fetching the incremented key failed, key does not exist")
+	}
+	v, ok := en.val.([]byte)
+	if !ok {
+		t.Fatalf("expected []byte, got %T", en.val)
+	}
+	intV, err := strconv.ParseInt(string(v), 10, 64)
+	if err != nil {
+		t.Fatalf("expected valid int, got %s", string(v))
+	}
+	if intV != 67 {
+		t.Fatalf("expected 67, got %d", intV)
+	}
+}
+
 func TestExecIncr(t *testing.T) {
 	db := NewStorage()
 	nonIntKey := "nonInt"

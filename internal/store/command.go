@@ -18,6 +18,69 @@ type command struct {
 	exec  execCmd
 }
 
+func execDecrBy(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+
+	rawDelta := string(args[1])
+	delta, err := strconv.ParseInt(rawDelta, 10, 64)
+	delta = -delta
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	d, ok := db.get(key)
+	if !ok {
+		db.put(key, &dataEntity{
+			val: args[1],
+		})
+		return &resp.Intiger{Data: delta}
+	}
+
+	// TODO: caution with type cast, as new types (lists, hashes) might be introduced
+	intVal, err := strconv.ParseInt(string(d.val.([]byte)), 10, 64)
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	intVal += delta
+
+	d.val = []byte(strconv.FormatInt(intVal, 10))
+	return &resp.Intiger{
+		Data: intVal,
+	}
+}
+
+func execIncrBy(db kVStore, args [][]byte) resp.RespType {
+	key := string(args[0])
+
+	rawDelta := string(args[1])
+	delta, err := strconv.ParseInt(rawDelta, 10, 64)
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	d, ok := db.get(key)
+	if !ok {
+		db.put(key, &dataEntity{
+			val: args[1],
+		})
+		return &resp.Intiger{Data: delta}
+	}
+
+	// TODO: caution with type cast, as new types (lists, hashes) might be introduced
+	intVal, err := strconv.ParseInt(string(d.val.([]byte)), 10, 64)
+	if err != nil {
+		return resp.NotInErr()
+	}
+
+	intVal += delta
+
+	d.val = []byte(strconv.FormatInt(intVal, 10))
+	return &resp.Intiger{
+		Data: intVal,
+	}
+}
+
 func execPtl(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	_, ok := db.get(key)
@@ -81,7 +144,7 @@ func execTtl(db kVStore, args [][]byte) resp.RespType {
 	}
 }
 
-func execDecr(db kVStore, args[][]byte) resp.RespType {
+func execDecr(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	d, ok := db.get(key)
 	if !ok {
@@ -105,7 +168,7 @@ func execDecr(db kVStore, args[][]byte) resp.RespType {
 	}
 }
 
-func execIncr(db kVStore, args[][]byte) resp.RespType {
+func execIncr(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	d, ok := db.get(key)
 	if !ok {
@@ -264,4 +327,6 @@ func init() {
 	registerCommand("persist", 2, execPersist)
 	registerCommand("incr", 2, execIncr)
 	registerCommand("decr", 2, execDecr)
+	registerCommand("incrby", 3, execIncrBy)
+	registerCommand("decrby", 3, execDecrBy)
 }
