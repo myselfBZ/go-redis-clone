@@ -13,11 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"net/http"
 
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 	"github.com/myselfBZ/go-redis-clone/internal/store"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type server struct {
@@ -165,23 +163,6 @@ func (s *server) handle(conn net.Conn) {
 func main() {
 	storage := store.NewStorage()
 	server := newServer(storage)
-
-	commandHandlers[resp.SET] = server.handleSet
-	commandHandlers[resp.GET] = server.handleGet
-	commandHandlers[resp.DEL] = server.handleDel
-	commandHandlers[resp.COMMAND_DOCS] = server.handleCommandDocs
-	commandHandlers[resp.TTL] = server.handleTTL
-	commandHandlers[resp.EXPIRE] = server.handleExpire
-	commandHandlers[resp.PTTL] = server.handlePTTL
-	commandHandlers[resp.PERSIST] = server.handlePersist
-	commandHandlers[resp.INCR] = server.handleIncr
-	commandHandlers[resp.DECR] = server.handleDecr
-	commandHandlers[resp.INCRBY] = server.handleIncrBy
-	commandHandlers[resp.PING] = server.handlePing
-
-	// prometheus
-	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":2112", nil)
 
 	slog.Info("server started...")
 	if err := server.run(); err != nil {

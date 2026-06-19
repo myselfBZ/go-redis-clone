@@ -2,8 +2,6 @@ package store
 
 import (
 	"errors"
-	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,22 +40,6 @@ func NewStorage() *Storage {
 	return s
 }
 
-type SetArgs struct {
-	Key   string
-	Value interface{}
-
-	PX int // ms
-	EX int // seconds
-	XX bool
-	NX bool
-}
-
-type ExpireArgs struct {
-	Key     string
-	Seconds int
-
-	XX, NX bool
-}
 
 type janitor struct {
 	interval time.Duration
@@ -112,126 +94,6 @@ func (s *Storage) startJanitor() {
 	s.janitor.run(s)
 }
 
-func (s *Storage) PTTL(key string) int64 {
-	s.mu.RLock()
-	expiresAt, hasExpire := s.expiringKeys[key]
-	_, existsInCache := s.data[key]
-	s.mu.RUnlock()
-
-	if !hasExpire && !existsInCache {
-		return -2
-	}
-
-	if !hasExpire && existsInCache {
-		return -1
-	}
-
-	if s.deleteIfExpired(key) {
-		return -2
-	}
-	ttl := int64(math.Round(float64(time.Until(expiresAt).Milliseconds())))
-	return ttl
-
-}
-
-func (s *Storage) TTL(key string) int64 {
-	s.mu.RLock()
-	expiresAt, hasExpire := s.expiringKeys[key]
-	_, existsInCache := s.data[key]
-	s.mu.RUnlock()
-
-	if !hasExpire && !existsInCache {
-		return -2
-	}
-
-	if !hasExpire && existsInCache {
-		return -1
-	}
-
-	if s.deleteIfExpired(key) {
-		return -2
-	}
-	ttl := int64(math.Round(time.Until(expiresAt).Seconds()))
-	return ttl
-}
-
-func (s *Storage) Decr(key string) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entity, exists := s.data[key]
-	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &dataEntity{
-			val: -1,
-		}
-		return -1, nil
-	}
-
-	val := entity.val.([]byte)
-
-	validInt, err := strconv.ParseInt(string(val), 10, 64)
-
-	if err != nil {
-		return 0, ErrNotInteger
-	}
-
-	validInt--
-
-	entity.val = []byte(strconv.FormatInt(validInt, 10))
-
-	return validInt, nil
-}
-
-func (s *Storage) IncrBy(key string, by int64) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entity, exists := s.data[key]
-	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &dataEntity{
-			val: by,
-		}
-		return by, nil
-	}
-	val := entity.val.([]byte)
-
-	validInt, err := strconv.ParseInt(string(val), 10, 64)
-
-	if err != nil {
-		return 0, ErrNotInteger
-	}
-
-	validInt += by
-
-	entity.val = []byte(strconv.FormatInt(validInt, 10))
-
-	return validInt, nil
-}
-
-func (s *Storage) Incr(key string) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entity, exists := s.data[key]
-	if !exists || s.deleteIfExpired(key) {
-		s.data[key] = &dataEntity{
-			val: 1,
-		}
-		return 1, nil
-	}
-
-	val := entity.val.([]byte)
-
-	validInt, err := strconv.ParseInt(string(val), 10, 64)
-
-	if err != nil {
-		return 0, ErrNotInteger
-	}
-
-	validInt++
-
-	entity.val = []byte(strconv.FormatInt(validInt, 10))
-
-	return validInt, nil
-}
-
 func (s *Storage) deleteExpired() {
 	expiredKeys := []string{}
 	s.mu.Lock()
@@ -251,153 +113,12 @@ func (s *Storage) deleteExpired() {
 	}
 }
 
-func (s *Storage) Expire(args ExpireArgs) bool {
-	now := time.Now()
-	expiresAt := now.Add(time.Duration(args.Seconds) * time.Second)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, hasExpiry := s.expiringKeys[args.Key]
-	_, exists := s.data[args.Key]
-
-	if !exists {
-		return false
-	}
-
-	if hasExpiry && s.deleteIfExpired(args.Key) {
-		return false
-	}
-
-	if args.Seconds <= 0 {
-		s.deleteKey(args.Key)
-		return exists
-	}
-
-	if hasExpiry && args.NX {
-		return false
-	}
-
-	if !args.XX && !args.NX {
-		s.expiringKeys[args.Key] = expiresAt
-		return true
-	}
-
-	if args.XX && exists && hasExpiry {
-		s.expiringKeys[args.Key] = expiresAt
-		return true
-	}
-
-	if args.NX && !hasExpiry && exists {
-		s.expiringKeys[args.Key] = expiresAt
-		return true
-	}
-
-	return false
-}
-
-func (s *Storage) Set(args SetArgs) bool {
-	written := false
-
-	s.mu.Lock()
-	_, ok := s.data[args.Key]
-	_, hasExpiration := s.expiringKeys[args.Key]
-
-	if (ok && args.XX) || (!ok && args.NX) || (!args.XX && !args.NX) {
-		s.data[args.Key] = &dataEntity{
-			val: args.Value,
-		}
-
-		if args.EX > 0 {
-			expiresAt := time.Now().Add(time.Duration(args.EX) * time.Second)
-			s.expiringKeys[args.Key] = expiresAt
-		}
-
-		if args.PX > 0 {
-			expiresAt := time.Now().Add(time.Duration(args.PX) * time.Millisecond)
-			s.expiringKeys[args.Key] = expiresAt
-		}
-
-		if args.PX == 0 && args.EX == 0 && hasExpiration {
-			delete(s.expiringKeys, args.Key)
-		}
-
-		written = true
-	}
-	s.mu.Unlock()
-	return written
-}
-
-func (s *Storage) Get(key string) ([]byte, error) {
-	s.mu.Lock()
-	if s.deleteIfExpired(key) {
-		s.mu.Unlock()
-		return nil, ErrNotFound
-	}
-	data, ok := s.data[key]
-	s.mu.Unlock()
-
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	val := data.val.([]byte)
-	return val, nil
-}
-
-func (s *Storage) Del(key string) error {
-	defer s.mu.Unlock()
-	s.mu.Lock()
-	_, ok := s.data[key]
-	if !ok {
-		return ErrNotFound
-	}
-	s.deleteKey(key)
-	return nil
-}
-
-func (s *Storage) Persist(key string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, exists := s.data[key]
-	_, hasTTL := s.expiringKeys[key]
-
-	if !exists || !hasTTL {
-		return false
-	}
-
-	// already expired
-	if hasTTL && s.deleteIfExpired(key) {
-		return false
-	}
-
-	delete(s.expiringKeys, key)
-	return true
-}
-
-// internal-only under lock
 func (s *Storage) deleteKey(key string) {
 	delete(s.data, key)
 	delete(s.expiringKeys, key)
 }
 
-// under lock only
-func (s *Storage) deleteIfExpired(key string) bool {
-	expiresAt, ok := s.expiringKeys[key]
-
-	if !ok {
-		return false
-	}
-
-	if time.Now().After(expiresAt) {
-		delete(s.data, key)
-		delete(s.expiringKeys, key)
-		return true
-	}
-	return false
-}
-
-// replacement for deleteIfExpired()
-func (s *Storage) deleteIfExpired0(key string) {
+func (s *Storage) deleteIfExpired(key string) {
 	expiresAt, ok := s.expiringKeys[key]
 
 	if !ok {
@@ -405,8 +126,7 @@ func (s *Storage) deleteIfExpired0(key string) {
 	}
 
 	if time.Now().After(expiresAt) {
-		delete(s.data, key)
-		delete(s.expiringKeys, key)
+		s.deleteKey(key)
 	}
 }
 
@@ -418,7 +138,7 @@ func (s *Storage) exists(key string) bool {
 }
 
 func (s *Storage) get(key string) (*dataEntity, bool) {
-	s.deleteIfExpired0(key)
+	s.deleteIfExpired(key)
 	en, ok := s.data[key]
 	return en, ok
 }
@@ -455,7 +175,7 @@ func (s *Storage) getExpiresAt(key string) (time.Time, bool) {
 
 // remove deletes a key, it retuns 1 on success and 0 if the key does not exist 
 func (s *Storage) remove(key string) int {
-	s.deleteIfExpired0(key)
+	s.deleteIfExpired(key)
 
 	if !s.exists(key) {
 		return 0
@@ -468,7 +188,7 @@ func (s *Storage) remove(key string) int {
 // persist deletes the key from the expiringKeys map
 // retuns 1 if the key has expiration, 0 if it does not
 func (s *Storage) persist(key string) int {
-	s.deleteIfExpired0(key)
+	s.deleteIfExpired(key)
 
 	if !s.exists(key) {
 		return 0
@@ -485,7 +205,7 @@ func (s *Storage) persist(key string) int {
 // expire sets an expiration on the specified key,
 // returns 1 if the key exists, 0 if it does not
 func (s *Storage) expire(key string, at time.Time) int {
-	s.deleteIfExpired0(key)
+	s.deleteIfExpired(key)
 
 	if !s.exists(key) {
 		return 0
