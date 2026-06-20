@@ -33,7 +33,7 @@ func execExpire(db kVStore, args [][]byte) resp.RespType {
 		switch strings.ToUpper(string(args[i])) {
 		case "NX":
 			if opt != "" {
-				return incompatibleErr 
+				return incompatibleErr
 			}
 			opt = "NX"
 
@@ -41,7 +41,7 @@ func execExpire(db kVStore, args [][]byte) resp.RespType {
 			if opt != "" {
 				return incompatibleErr
 			}
-			opt = "XX" 
+			opt = "XX"
 
 		case "GT":
 			if opt != "" {
@@ -75,17 +75,17 @@ func execExpire(db kVStore, args [][]byte) resp.RespType {
 		if opt == "NX" && !expires {
 			db.expire(key, newExpiry)
 			result.Data = 1
-		}  
+		}
 
 		if opt == "XX" && expires {
 			db.expire(key, newExpiry)
 			result.Data = 1
-		}  
+		}
 
 		if opt == "GT" && (newExpiry.Sub(at).Milliseconds() > 0) {
 			db.expire(key, newExpiry)
 			result.Data = 1
-		} 
+		}
 
 		if opt == "LT" && (newExpiry.Sub(at).Milliseconds() < 0) {
 			db.expire(key, newExpiry)
@@ -375,7 +375,9 @@ func execSet(db kVStore, args [][]byte) resp.RespType {
 		return resp.OkReply()
 	}
 
-	return &resp.Nil{}
+	return &resp.BulkStr{
+		Data: nil,
+	}
 }
 
 func validArity(arity int, actual int) bool {
