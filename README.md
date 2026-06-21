@@ -1,5 +1,16 @@
 A lightweight, in-memory Redis-clone key-value storage written in Go. Supports atomic operations, TTLs, and concurrency-safe access.
 
+
+Requirements:
+- Go >= 1.25.1 
+
+
+Run:
+```sh
+go run ./cmd/server/
+```
+
+
 ## Features
 
 - **Core Commands**
