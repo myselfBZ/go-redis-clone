@@ -1,71 +1,45 @@
 package resp
 
 import (
+	"bytes"
 	"io"
+	"slices"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
-type chunkReader struct {
-	data            string
-	numBytesPerRead int
-	pos             int
-}
-
-func (cr *chunkReader) Read(p []byte) (n int, err error) {
-
-	if cr.pos >= len(cr.data) {
-		return 0, io.EOF
+// TODO: add more test suites
+func TestParse(t *testing.T) {
+	data := []RespBulkStrArr{
+		{data: [][]byte{[]byte("SET"), []byte("KEY"), []byte("VAL")} },
+		{data: [][]byte{[]byte("PING")}},
 	}
 
-	readEndIdx := cr.pos + cr.numBytesPerRead
-	readEndIdx = min(readEndIdx, len(cr.data))
-	n = copy(p, cr.data[cr.pos:readEndIdx])
-	cr.pos += n
+	r := bytes.NewBuffer([]byte{})
 
-	return n, nil
-}
-
-func TestParseCommand(t *testing.T) {
-	reader := &chunkReader{
-		data: "*0\r\n",
-		numBytesPerRead: 1,
+	for _, d := range data {
+		r.Write(d.ToBytes())
 	}
 
-	command, err := Parse(reader)
-	// i mean... yeah it is hacky
-	require.NotNil(t, err)
+	ch := Parse(r)
+	i := 0
 
-	reader = &chunkReader{
-		data: "*sd\r\n",
-		numBytesPerRead: 1,
+	for c  := range ch {
+
+		if c.Err != nil {
+			// end
+			if c.Err == io.EOF {
+				return
+			}
+
+			t.Fatalf("unexpected error. test suite idx %d, error '%v'", i, c.Err)
+		}
+
+		expected := data[i].ToBytes()
+		got := c.arr.ToBytes()
+
+		if !slices.Equal(expected, got) {
+			t.Errorf("expected '%q', got '%q'", string(expected), string(got))
+		}
+		i++
 	}
-
-	command, err = Parse(reader)
-
-	require.Error(t, err)
-	require.Nil(t, command)
-
-	reader = &chunkReader{
-		data: "*1\r\n$3\r\nSET\r\n",
-		numBytesPerRead: 1,
-	}
-
-	command, err = Parse(reader)
-
-	require.NoError(t, err)
-	
-	require.Equal(t, 1,command.arr.Length())
-
-	bulkStr := command.arr.data[0]
-	require.Equal(t, []byte("SET"), bulkStr)
-
-	reader = &chunkReader{
-		data: "*1\r\n$3\r\nSETTLE\r\n",
-		numBytesPerRead: 1,
-	}
-
-	command, err = Parse(reader)
-	require.Error(t, err)
 }

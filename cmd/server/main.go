@@ -126,8 +126,11 @@ func (s *server) handle(conn net.Conn) {
 		s.closeClient(conn)
 	}()
 
-	for {
-		command, err := resp.Parse(conn)
+	ch := resp.Parse(conn)
+
+	for command := range ch {
+
+		err := command.Err
 
 		if err != nil {
 			if errors.Is(err, io.EOF) || 

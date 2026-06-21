@@ -3,42 +3,20 @@ package resp
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strconv"
 )
 
-var (
-	ErrInvalidLength = errors.New("invalid length")
-	ErrInvalidValue  = errors.New("invalid value")
-	ErrInvalidType   = errors.New("invalid type")
-)
 
 var (
 	CRLF = "\r\n"
 )
 
-const (
-	EXPIRE  CommandType = "EXPIRE"
-	TTL     CommandType = "TTL"
-	PTTL    CommandType = "PTTL"
-	SET     CommandType = "SET"
-	DEL     CommandType = "DEL"
-	GET     CommandType = "GET"
-	PERSIST CommandType = "PERSIST"
-	INCR    CommandType = "INCR"
-	DECR    CommandType = "DECR"
-	INCRBY  CommandType = "INCRBY"
-	PING    CommandType = "PING"
-
-	COMMAND_DOCS CommandType = "COMMAND"
-)
-
-type CommandType string
 
 type Command struct {
 	arr *RespBulkStrArr
+	Err error
 }
 
 func (c *Command) DebugStr() string {
@@ -58,76 +36,118 @@ type Response struct {
 	Success bool
 }
 
-func Parse(reader io.Reader) (*Command, error) {
-	bufReader := bufio.NewReader(reader)
-	line, err := bufReader.ReadBytes('\n')
-	if err != nil {
-		return nil, err
-	}
+func parse(bufReader *bufio.Reader, ch chan <- *Command) {
+	defer close(ch)
 
-	if len(line) <= 2 {
-		return nil, fmt.Errorf("invalid protocol")
-	}
+outer:
+	for {
+		cmd := &Command{}
 
-	if line[len(line)-2] != '\r' {
-		return nil, fmt.Errorf("invalid protocol")
-	}
-
-	if len(line) == 0 || line[0] != '*' {
-		return nil, fmt.Errorf("invalid protocol")
-	}
-
-	numArgs, err := strconv.Atoi(string(bytes.TrimSpace(line[1:])))
-	if err != nil {
-		return nil, err
-	}
-
-	args := &RespBulkStrArr{}
-
-	for i := 0; i < numArgs; i++ {
 		line, err := bufReader.ReadBytes('\n')
 
 		if err != nil {
-			return nil, err
+			cmd.Err = err
+			ch <- cmd
+			return
+		}
+
+		if len(line) <= 2 {
+			cmd.Err = fmt.Errorf("invalid protocol")
+			ch <- cmd
+			continue
 		}
 
 		if line[len(line)-2] != '\r' {
-			return nil, fmt.Errorf("invalid protocol")
+			cmd.Err = fmt.Errorf("invalid protocol")
+			ch <- cmd
+			continue
 		}
 
-		if len(line) == 0 || line[0] != '$' {
-			return nil, fmt.Errorf("invalid protocol")
+		if len(line) == 0 || line[0] != '*' {
+			cmd.Err = fmt.Errorf("invalid protocol")
+			ch <- cmd
+			continue
 		}
 
-		argLen, err := strconv.Atoi(string(bytes.TrimSpace(line[1:])))
+		numArgs, err := strconv.Atoi(string(bytes.TrimSpace(line[1:])))
 		if err != nil {
-			return nil, err
+			cmd.Err = err
+			ch <- cmd
+			continue
 		}
 
-		arg := make([]byte, argLen)
-		_, err = io.ReadFull(bufReader, arg)
-		if err != nil {
-			return nil, err
+		args := &RespBulkStrArr{}
+
+		for i := 0; i < numArgs; i++ {
+			line, err := bufReader.ReadBytes('\n')
+
+			if err != nil {
+				cmd.Err = err
+				ch <- cmd
+				return
+			}
+
+			if line[len(line)-2] != '\r' {
+				cmd.Err = fmt.Errorf("invalid protocol")
+				ch <- cmd
+				continue outer
+			}
+
+			if len(line) == 0 || line[0] != '$' {
+				cmd.Err = fmt.Errorf("invalid protocol")
+				ch <- cmd
+				continue outer
+
+			}
+
+			argLen, err := strconv.Atoi(string(bytes.TrimSpace(line[1:])))
+			if err != nil {
+				cmd.Err = err
+				ch <- cmd
+				return
+			}
+
+			arg := make([]byte, argLen)
+			_, err = io.ReadFull(bufReader, arg)
+
+			if err != nil {
+				cmd.Err = err
+				ch <- cmd
+				return
+			}
+
+			args.Append(arg)
+
+			end, err := bufReader.ReadBytes('\n')
+
+			if err != nil {
+				cmd.Err = err
+				ch <- cmd
+				return	
+			}
+
+			if len(end) != 2 || end[0] != '\r' {
+				cmd.Err = fmt.Errorf("invalid protocol")
+				ch <- cmd
+				continue
+			}
 		}
 
-		args.Append(arg)
-
-		end, err := bufReader.ReadBytes('\n')
-
-		if err != nil {
-			return nil, io.EOF
+		if args.Length() == 0 {
+			cmd.Err = fmt.Errorf("no command")
+			ch <- cmd
+			continue outer
 		}
 
-		if len(end) != 2 || end[0] != '\r' {
-			return nil, fmt.Errorf("invalid protocol")
-		}
+		cmd.arr = args
+		ch <- cmd
+
 	}
+}
 
-	if args.Length() == 0 {
-		return nil, fmt.Errorf("no command")
-	}
-
-	return &Command{
-		arr: args,
-	}, nil
+func Parse(reader io.Reader) (chan *Command) {
+	ch := make(chan *Command)
+	bufReader := bufio.NewReader(reader)
+	go parse(bufReader, ch)
+	return ch
 }

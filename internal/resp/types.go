@@ -17,7 +17,6 @@ var(
 	_ RespType = (*RespBulkStrArr)(nil)
 	_ RespType = (*RespErr)(nil)
 	_ RespType = (*BulkStr)(nil)
-	_ RespType = (*Nil)(nil)
 	_ RespType = (*Intiger)(nil)
 )
 
@@ -43,6 +42,10 @@ func (rt *RespBulkStrArr) Type() string {
 }
 
 func (rt *RespBulkStrArr) ToBytes() []byte {
+	if len(rt.data) == 0 {
+		return []byte("*0\r\n")
+	}
+
 	var buf bytes.Buffer
 	argLen := len(rt.data)
 	bufLen := 1 + len(strconv.Itoa(argLen)) + 2
@@ -133,16 +136,3 @@ func (rt *RespErr) ToBytes() []byte {
 func (rt *RespErr) Type() string {
 	return "error"
 }
-
-type Nil struct {}
-
-func (rt *Nil) ToBytes() []byte {
-	return []byte("_\r\n")
-}
-
-func (rt *Nil) Type() string {
-	return "(nil)"
-}
-
-
-

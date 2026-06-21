@@ -278,7 +278,7 @@ func execGet(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	data, ok := db.get(key)
 	if !ok {
-		return &resp.Nil{}
+		return &resp.BulkStr{Data: nil}
 	}
 	payload := data.val.([]byte)
 	return &resp.BulkStr{
