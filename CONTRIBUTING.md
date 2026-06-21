@@ -4,7 +4,9 @@ myselfBZ/go-redis-clone contribution guidlines.
 
 ## Second of all, please follow the rules mentioned below.
 
-Before writing any code open an issue or take a look at the existing issues, and see if the author approves your proposal of change to the codebase.
+Before writing any code open an issue or take a look at the existing issues. 
+Or even better, review the TODOs section in the README.md file for already needed features
+See if the author approves your proposal of change to the codebase.
 After the approval you can fork and create your own branch.
 
 ## During development please strictly adhere to the following rules. 
