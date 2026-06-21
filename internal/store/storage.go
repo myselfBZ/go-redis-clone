@@ -1,7 +1,7 @@
 package store
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -9,9 +9,8 @@ import (
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
 )
 
-var (
-	ErrNotFound   = errors.New("key not found")
-	ErrNotInteger = errors.New("value is not an intiger")
+var(
+	ErrClosed = fmt.Errorf("use of closed storage engine")
 )
 
 // it's for the command executors, for now...
@@ -30,6 +29,7 @@ func NewStorage() *Storage {
 	s := &Storage{
 		mu:   sync.RWMutex{},
 		data: make(map[string]*dataEntity),
+		closed: false,
 		janitor: &janitor{
 			interval: time.Minute,
 			exit:     make(chan struct{}),
@@ -64,30 +64,44 @@ type Storage struct {
 	mu      sync.RWMutex
 	data    map[string]*dataEntity
 	janitor *janitor
+	//accessed by only .Close() and only  .Close()
+	closed 	bool
 
 	expiringKeys map[string]time.Time
 }
 
 
-func (s *Storage) Exec(cmd [][]byte) resp.RespType {
+// Exec executes the given command. It returns an error ONLY when it's called after the storage is closed.
+// Returned error is ALWAYS ErrClosed.
+func (s *Storage) Exec(cmd [][]byte) (resp.RespType, error) {
+	if s.closed {
+		return nil, ErrClosed
+	}
+
 	name := strings.ToLower(string(cmd[0]))
 	c, ok := cmdTable[name]
 	if !ok {
-		return resp.MakeErr("ERR invalid command")
+		return resp.MakeErr("ERR invalid command"), nil
 	}
 
 	if !validArity(c.arity, len(cmd)) {
-		return resp.ArgNumErr(name)
+		return resp.ArgNumErr(name), nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return c.exec(s, cmd[1:])
+	return c.exec(s, cmd[1:]), nil
 }
 
 func (s *Storage) Close() {
-	s.janitor.exit <- struct{}{}
+	s.closed = true
+	close(s.janitor.exit)
+	s.mu.Lock()
+	// clearing up the map
+	s.data = make(map[string]*dataEntity)
+	s.data = make(map[string]*dataEntity)
+	s.mu.Unlock()
 }
 
 func (s *Storage) startJanitor() {

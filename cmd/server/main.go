@@ -153,7 +153,12 @@ func (s *server) handle(conn net.Conn) {
 
 		args := command.Args()
 
-		res := s.storage.Exec(args)
+		res, err := s.storage.Exec(args)
+
+		if err != nil {
+			slog.Error("storage returned an error", "err", err)
+			panic("Fatal error")
+		}
 
 		if _, err := conn.Write(res.ToBytes()); err != nil {
 			slog.Error("connection write error", "err", err)
