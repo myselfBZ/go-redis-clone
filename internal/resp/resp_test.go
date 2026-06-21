@@ -10,7 +10,7 @@ import (
 // TODO: add more test suites
 func TestParse(t *testing.T) {
 	data := []RespBulkStrArr{
-		{data: [][]byte{[]byte("SET"), []byte("KEY"), []byte("VAL")} },
+		{data: [][]byte{[]byte("SET"), []byte("KEY\r\n"), []byte("VAL")} },
 		{data: [][]byte{[]byte("PING")}},
 	}
 
