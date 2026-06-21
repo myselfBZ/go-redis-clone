@@ -24,7 +24,7 @@ go run ./cmd/server/
   - `INCR` – atomically increment an integer value
   - `DECR` – atomically decrement an integer value
   - `INCRBY` – atomically increment an integer value by a given amount
-  - `INCRBY` – atomically decrements an integer value by a given amount
+  - `DECRBY` – atomically decrements an integer value by a given amount
   - `PING` – server liveness check
 
 - **TTL Handling**
