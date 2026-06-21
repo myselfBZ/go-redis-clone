@@ -416,6 +416,8 @@ func init() {
 	registerCommand("incrby", 3, execIncrBy)
 	registerCommand("decrby", 3, execDecrBy)
 	registerCommand("expire", -3, execExpire)
+
+	// TODO: move it to server level
 	registerCommand("ping", 1, func(db kVStore, args [][]byte) resp.RespType {
 		return &resp.SimpleStr{
 			Data: []byte("PONG"),

@@ -13,6 +13,7 @@ A lightweight, in-memory Redis-clone key-value storage written in Go. Supports a
   - `INCR` – atomically increment an integer value
   - `DECR` – atomically decrement an integer value
   - `INCRBY` – atomically increment an integer value by a given amount
+  - `INCRBY` – atomically decrements an integer value by a given amount
   - `PING` – server liveness check
 
 - **TTL Handling**
@@ -28,12 +29,9 @@ A lightweight, in-memory Redis-clone key-value storage written in Go. Supports a
 - **RESP Protocol Ready**
   - Designed to integrate with RESP handlers for network communication
 
-## Design Highlights
-
-- **Separation of Concerns**
-  - Storage layer manages data and TTLs
-  - Protocol/command layer handles parsing and validation
-
-- **Atomic Operations**
-  - NX/XX semantics implemented correctly
-  - TTL updates handled atomically with value updates
+- **TODOs**:
+ - Having a better logger
+ - Seperate package for the Server
+ - New Data Types: Sets, Hashes, and JŚON.
+ - Sharding
+ - Mock DB for tests
