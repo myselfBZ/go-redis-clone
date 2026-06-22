@@ -25,7 +25,7 @@ func TestExec(t *testing.T) {
 		{
 			name: "GET command",
 			raw: [][]byte{[]byte("GET"), []byte("key")},
-			expected: &resp.Nil{},
+			expected: &resp.BulkStr{Data: nil},
 		},
 		{
 			name: "SET command | invalid args",
@@ -41,7 +41,7 @@ func TestExec(t *testing.T) {
 
 
 	for _, test := range tests {
-		rep := db.Exec(test.raw)
+		rep, _ := db.Exec(test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
@@ -149,7 +149,7 @@ func TestGet(t *testing.T) {
 		{
 			name: "GET non-existent key",
 			raw: [][]byte{[]byte("key")},
-			expected: &resp.Nil{},
+			expected: &resp.BulkStr{Data: nil},
 		},
 	}
 	for _, test := range tests {
@@ -409,13 +409,13 @@ func TestExecSet(t *testing.T) {
 		},
 		{
 			name: "SET with xx on non-existent key",
-			expected: &resp.Nil{},
+			expected: &resp.BulkStr{Data: nil},
 			raw: [][]byte{[]byte("key1"), []byte("val"), []byte("xx")},
 		},
 		{
 			name: "SET with nx on exisiting key",
 			// key already exists
-			expected: &resp.Nil{},
+			expected: &resp.BulkStr{Data: nil},
 			raw: [][]byte{[]byte("key"), []byte("val"), []byte("nx")},
 		},
 		{
