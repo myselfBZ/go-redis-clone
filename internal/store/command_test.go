@@ -7,7 +7,19 @@ import (
 	"time"
 
 	"github.com/myselfBZ/go-redis-clone/internal/resp"
+	"github.com/myselfBZ/go-redis-clone/pkg/utils"
 )
+
+const defaultKeyLength = 5
+const defaultValLength = 100
+
+func toBytes(args ...string) [][]byte {
+	result := make([][]byte, len(args))
+	for i, a := range args {
+		result[i] = []byte(a)
+	}
+	return result
+}
 
 type suite struct {
 	name string
@@ -15,7 +27,7 @@ type suite struct {
 	raw [][]byte
 }
 
-
+var testDb = NewStorage()
 
 // TODO: crete a mock db, more test cases
 func TestExec(t *testing.T) {
@@ -393,55 +405,56 @@ func TestExecIncr(t *testing.T) {
 }
 
 func TestExecSet(t *testing.T) {
-	db := NewStorage()
+	defKey := utils.RandString(defaultKeyLength)
+	defVal := utils.RandString(defaultValLength)
 
 	tests := []suite{
 		{
 			name: "SET with nx on non-existent key",
 			expected: resp.OkReply(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("nx")},
+			raw: toBytes(defKey, defVal, "NX"),
 		},
 		{
 			name: "SET with xx on existing key",
 			// previous command set the "key"
 			expected: resp.OkReply(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("xx")},
+			raw: toBytes(defKey, defVal, "XX"),
 		},
 		{
 			name: "SET with xx on non-existent key",
 			expected: &resp.BulkStr{Data: nil},
-			raw: [][]byte{[]byte("key1"), []byte("val"), []byte("xx")},
+			raw: toBytes(defKey+"nonexistent", defVal, "XX"),
 		},
 		{
 			name: "SET with nx on exisiting key",
 			// key already exists
 			expected: &resp.BulkStr{Data: nil},
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("nx")},
+			raw: toBytes(defKey, defVal, "NX"),
 		},
 		{
 			name: "SET with malformed ex",
 			expected: resp.SyntaxErr(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("ex")},
+			raw: toBytes(defKey, defVal, "EX"),
 		},
 		{
 			name: "SET with ex 10s",
 			expected: resp.OkReply(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("ex"), []byte("10")},
+			raw: toBytes(defKey, defVal, "EX", "10"),
 		},
 		{
 			name: "SET with px 10ms",
 			expected: resp.OkReply(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("px"), []byte("10")},
+			raw: toBytes(defKey, defVal, "PX", "10"),
 		},
 		{
 			name: "SET with malformed px",
 			expected: resp.SyntaxErr(),
-			raw: [][]byte{[]byte("key"), []byte("val"), []byte("px")},
+			raw: toBytes(defKey, defVal, "PX"),
 		},
 	}
 	
 	for _, test := range tests {
-		rep := execSet(db, test.raw)
+		rep := execSet(testDb, test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
@@ -449,14 +462,15 @@ func TestExecSet(t *testing.T) {
 }
 
 func TestExecDel(t *testing.T) {
-	db := NewStorage()
-	db.put("key", &dataEntity{
+	key1, key2, key3 := utils.RandString(5), utils.RandString(5), utils.RandString(5)
+
+	testDb.put(key1, &dataEntity{
 		val: []byte("value"),
 	})
-	db.put("key1", &dataEntity{
+	testDb.put(key2, &dataEntity{
 		val: []byte("value"),
 	})
-	db.put("key2", &dataEntity{
+	testDb.put(key3, &dataEntity{
 		val: []byte("value"),
 	})
 
@@ -464,22 +478,22 @@ func TestExecDel(t *testing.T) {
 		{
 			name: "DEL on multiple keys",
 			expected: &resp.Intiger{Data: 2},
-			raw: [][]byte{[]byte("key1"), []byte("key2")},
+			raw: toBytes(key1, key2),
 		},
 		{
 			name: "DEL on non-existent key",
 			expected: &resp.Intiger{Data: 0},
-			raw: [][]byte{[]byte("invalid")},
+			raw: toBytes("invalidkey"),
 		},
 		{
 			name: "DEL on existing key",
 			expected: &resp.Intiger{Data: 1},
-			raw: [][]byte{[]byte("key")},
+			raw: toBytes(key3),
 		},
 	}
 	
 	for _, test := range tests {
-		rep := execDel(db, test.raw)
+		rep := execDel(testDb, test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
@@ -542,9 +556,3 @@ func TestExpire(t *testing.T) {
 		}
 	}
 }
-
-
-
-
-
-
