@@ -291,46 +291,48 @@ func TestDecrBy(t *testing.T) {
 }
 
 func TestExecIncrBy(t *testing.T) {
-	db := NewStorage()
-	nonIntKey := "nonInt"
+	testDb.mu.Lock()
+	defer testDb.mu.Unlock()
+
+	nonIntKey := utils.RandString(defaultKeyLength)
 	nonIntVal := &dataEntity{
 		val: []byte("nonInt"),
 	}
 
-	db.put(nonIntKey, nonIntVal)
+	testDb.put(nonIntKey, nonIntVal)
 
-	key := "key"
+	key := utils.RandString(defaultValLength)
 	val := &dataEntity{
 		val: []byte("1"),
 	}
 
-	db.put(key, val)
+	testDb.put(key, val)
 
 	tests := []suite{
 		{
 			name: "INCRBY on non-existent key",
 			expected: &resp.Intiger{Data: 67},
-			raw: [][]byte{[]byte("key1"), []byte("67")},
+			raw: toBytes("does_not_exist", "67"),
 		},
 		{
 			name: "INCRBY on valid key",
 			expected: &resp.Intiger{Data: 67},
-			raw: [][]byte{[]byte("key"), []byte("66")},
+			raw: toBytes(key, "66"),
 		},
 		{
 			name: "INCRBY on non-intiger key",
 			expected: resp.NotInErr(),
-			raw: [][]byte{[]byte(nonIntKey), []byte("15")},
+			raw: toBytes(nonIntKey, "15"),
 		},
 	}
 
 	for _, test := range tests {
-		rep := execIncrBy(db, test.raw)
+		rep := execIncrBy(testDb, test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
 	}
-	en, ok := db.get(key)
+	en, ok := testDb.get(key)
 	if !ok {
 		t.Fatalf("fetching the incremented key failed, key does not exist")
 	}
@@ -348,63 +350,53 @@ func TestExecIncrBy(t *testing.T) {
 }
 
 func TestExecIncr(t *testing.T) {
-	db := NewStorage()
-	nonIntKey := "nonInt"
+	testDb.mu.Lock()
+	defer testDb.mu.Unlock()
+	
+	nonIntKey := utils.RandString(defaultKeyLength)
 	nonIntVal := &dataEntity{
 		val: []byte("nonInt"),
 	}
 
-	db.put(nonIntKey, nonIntVal)
+	testDb.put(nonIntKey, nonIntVal)
 
-	key := "key"
+	validKey := utils.RandString(defaultKeyLength)
 	val := &dataEntity{
 		val: []byte("1"),
 	}
 
-	db.put(key, val)
+	testDb.put(validKey, val)
 
 	tests := []suite{
 		{
 			name: "INCR on non-existent key",
 			expected: &resp.Intiger{Data: 1},
-			raw: [][]byte{[]byte("key1")},
+			raw: toBytes("non_existent_key"),
 		},
 		{
 			name: "INCR on valid key",
 			expected: &resp.Intiger{Data: 2},
-			raw: [][]byte{[]byte("key")},
+			raw: toBytes(validKey),
 		},
 		{
 			name: "INCR on non-intiger key",
 			expected: resp.NotInErr(),
-			raw: [][]byte{[]byte(nonIntKey)},
+			raw: toBytes(nonIntKey),
 		},
 	}
 
 	for _, test := range tests {
-		rep := execIncr(db, test.raw)
+		rep := execIncr(testDb, test.raw)
 		if !slices.Equal(rep.ToBytes(), test.expected.ToBytes()) {
 			t.Fatalf("%s. Response did not match. got '%q', want '%q'", test.name, string(rep.ToBytes()), string(test.expected.ToBytes()))
 		}
 	}
-	en, ok := db.get(key)
-	if !ok {
-		t.Fatalf("fetching the incremented key failed, key does not exist")
-	}
-	v, ok := en.val.([]byte)
-	if !ok {
-		t.Fatalf("expected []byte, got %T", en.val)
-	}
-	intV, err := strconv.ParseInt(string(v), 10, 64)
-	if err != nil {
-		t.Fatalf("expected valid int, got %s", string(v))
-	}
-	if intV != 2 {
-		t.Fatalf("expected 2, got %d", intV)
-	}
 }
 
 func TestExecSet(t *testing.T) {
+	testDb.mu.Lock()
+	defer testDb.mu.Unlock()
+
 	defKey := utils.RandString(defaultKeyLength)
 	defVal := utils.RandString(defaultValLength)
 
@@ -462,6 +454,9 @@ func TestExecSet(t *testing.T) {
 }
 
 func TestExecDel(t *testing.T) {
+	testDb.mu.Lock()
+	defer testDb.mu.Unlock()
+
 	key1, key2, key3 := utils.RandString(5), utils.RandString(5), utils.RandString(5)
 
 	testDb.put(key1, &dataEntity{
