@@ -45,4 +45,3 @@ go run ./cmd/server/
  - Seperate package for the Server
  - New Data Types: Sets, Hashes, and JŚON.
  - Sharding
- - Mock DB for tests
