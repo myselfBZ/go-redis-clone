@@ -31,10 +31,6 @@ func (c *Command) Args() [][]byte {
 	return c.arr.data
 }
 
-type Response struct {
-	Data    RespType
-	Success bool
-}
 
 func parse(bufReader *bufio.Reader, ch chan <- *Command) {
 	defer close(ch)
