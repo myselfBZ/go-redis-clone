@@ -39,6 +39,9 @@ go run ./cmd/server/
 
 - **RESP Protocol Ready**
   - Designed to integrate with RESP handlers for network communication
+  > [!NOTE]
+  > It does not use bufio.Reader for parsing. 
+  > Custom parser has been implemented to prevent memory exhaustion attacks, and better robustness.
 
 - **TODOs**:
  - Having a better logger
