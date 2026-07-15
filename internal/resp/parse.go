@@ -11,10 +11,14 @@ var (
 	ErrInvalidHeaderLength = errors.New("invalid header length")
 	ErrHeaderSizeTooBig    = errors.New("header for this content is too big")
 	ErrRequireMultiBulk    = errors.New("require multi bulk protocol")
-	ErrFooterMissing 	   = errors.New("footer is missing")
+	ErrBulkSizeTooBig      = errors.New("bulk string size exceeds 512 MB")
+	ErrFooterMissing       = errors.New("footer is missing")
 )
 
-const MAX_HEADER_LENGHT = 20
+const (
+	MAX_HEADER_LENGHT = 20
+	MAX_BULK_SIZE     = 512 << 20
+)
 
 const (
 	payloadStateInit         = "init"
@@ -24,13 +28,13 @@ const (
 
 type bulk struct {
 	length int64
-	data []byte
+	data   []byte
 }
 
 type payload struct {
-	state     string
+	state string
 
-	curIdx 	  int64
+	curIdx    int64
 	arrLength int64
 	multiBulk []*bulk
 }
@@ -50,12 +54,12 @@ func resumeParsing(b *bulk, data []byte) (int, bool, error) {
 	}
 	if length+2 <= dataLen {
 		neededData := data[:length]
-		footer := data[length:length+2]
+		footer := data[length : length+2]
 		if !bytes.Equal(footer, []byte(CRLF)) {
 			return 0, false, ErrFooterMissing
 		}
 		b.data = append(b.data, neededData...)
-		return len(neededData)+2, true, nil
+		return len(neededData) + 2, true, nil
 	}
 	if length <= dataLen {
 		neededData := data[:length]
@@ -118,22 +122,26 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 				}
 				h := body[:idx]
 				if h[0] != '$' {
-					return 0, ErrRequireMultiBulk 
+					return 0, ErrRequireMultiBulk
 				}
 				length, err := strconv.ParseInt(string(h[1:idx]), 10, 64)
 				if err != nil {
 					return 0, ErrInvalidHeaderLength
 				}
 
+				if length > MAX_BULK_SIZE {
+					return 0, ErrBulkSizeTooBig
+				}
+
 				b := &bulk{
 					length: length,
-					data: make([]byte, 0),
+					data:   make([]byte, 0),
 				}
 				read += len(h) + 2
 
 				if length+2 <= int64(len(body[idx+2:])) {
-					start := idx+2
-					end := idx+2+int(length)
+					start := idx + 2
+					end := idx + 2 + int(length)
 					bulkData := make([]byte, length)
 					copy(bulkData, body[start:end])
 					if !bytes.Equal(body[end:end+2], []byte(CRLF)) {
@@ -142,7 +150,7 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 
 					b.data = bulkData
 					p.multiBulk = append(p.multiBulk, b)
-					read +=  len(bulkData) + len(CRLF)
+					read += len(bulkData) + len(CRLF)
 					p.curIdx++
 				} else {
 					b.data = append(b.data, body[idx+2:]...)
@@ -158,7 +166,7 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 	}
 }
 
-func Parse(stream io.Reader) <- chan *Command  {
+func Parse(stream io.Reader) <-chan *Command {
 	ch := make(chan *Command)
 	go parse(stream, ch)
 	return ch
