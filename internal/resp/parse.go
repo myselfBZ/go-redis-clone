@@ -84,6 +84,11 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 				return 0, nil
 			}
 
+			// empty header
+			if idx == 0 {
+				return 0, ErrInvalidHeaderLength
+			}
+
 			h := data[:idx]
 			if h[0] != '*' {
 				return 0, ErrRequireMultiBulk
@@ -91,6 +96,9 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 
 			length, err := strconv.ParseInt(string(h[1:idx]), 10, 64)
 			if err != nil {
+				return 0, ErrInvalidHeaderLength
+			}
+			if length < 0 {
 				return 0, ErrInvalidHeaderLength
 			}
 			p.arrLength = length
@@ -120,6 +128,9 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 				if idx < 0 {
 					return read, nil
 				}
+				if idx == 0 {
+					return 0, ErrInvalidHeaderLength
+				}
 				h := body[:idx]
 				if h[0] != '$' {
 					return 0, ErrRequireMultiBulk
@@ -128,7 +139,15 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 				if err != nil {
 					return 0, ErrInvalidHeaderLength
 				}
-
+				if length <= 0{
+					// no op for NULL
+					read += len(h) + len(CRLF)
+					p.multiBulk = append(p.multiBulk, &bulk{
+						length: length,
+					})
+					p.curIdx++
+					continue
+				}
 				if length > MAX_BULK_SIZE {
 					return 0, ErrBulkSizeTooBig
 				}
