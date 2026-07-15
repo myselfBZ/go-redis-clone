@@ -41,7 +41,7 @@ go run ./cmd/server/
   - Designed to integrate with RESP handlers for network communication
   > [!NOTE]
   > It does not use bufio.Reader for parsing. 
-  > Custom parser has been implemented to prevent memory exhaustion attacks, and better robustness.
+  > Custom parser has been implemented to prevent memory exhaustion attacks, and for better robustness.
 
 - **TODOs**:
  - Having a better logger
