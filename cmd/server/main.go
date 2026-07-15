@@ -2,12 +2,10 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -126,29 +124,15 @@ func (s *server) handle(conn net.Conn) {
 		s.closeClient(conn)
 	}()
 
-	ch := resp.Parse(conn)
+	ch := resp.Parse0(conn)
 
 	for command := range ch {
 
 		err := command.Err
 
 		if err != nil {
-			if errors.Is(err, io.EOF) || 
-			errors.Is(err, io.ErrUnexpectedEOF) || 
-			strings.Contains(err.Error(), "use of closed network connection") {
-				return
-			}
-
-			// protocol error
-			respErr := resp.RespErr{
-				Data: []byte(err.Error()),
-			}
-
-			if _, err := conn.Write(respErr.ToBytes()); err != nil {
-				return
-			}
-
-			continue
+			slog.Info("error", "err", err)
+			return
 		}
 
 		args := command.Args()
