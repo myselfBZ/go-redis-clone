@@ -31,7 +31,7 @@ func TestParse0(t *testing.T) {
 		numBytesPerRead: 4,
 	}
 
-	ch := Parse0(r)
+	ch := Parse(r)
 
 	cmd := <- ch
 
@@ -59,7 +59,7 @@ func TestParse0(t *testing.T) {
 		numBytesPerRead: 4,
 	}
 
-	ch = Parse0(r)
+	ch = Parse(r)
 	cmd = <- ch
 
 	if cmd.Err != nil  {

@@ -158,13 +158,13 @@ func (p *payload) parseBytes(data []byte) (int, error) {
 	}
 }
 
-func Parse0(stream io.Reader) <- chan *Command  {
+func Parse(stream io.Reader) <- chan *Command  {
 	ch := make(chan *Command)
-	go parse0(stream, ch)
+	go parse(stream, ch)
 	return ch
 }
 
-func parse0(stream io.Reader, ch chan<- *Command) {
+func parse(stream io.Reader, ch chan<- *Command) {
 	for {
 		p := &payload{
 			state:     payloadStateInit,

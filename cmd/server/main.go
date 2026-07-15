@@ -124,7 +124,7 @@ func (s *server) handle(conn net.Conn) {
 		s.closeClient(conn)
 	}()
 
-	ch := resp.Parse0(conn)
+	ch := resp.Parse(conn)
 
 	for command := range ch {
 
