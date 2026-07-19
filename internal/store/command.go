@@ -274,6 +274,23 @@ func execIncr(db kVStore, args [][]byte) resp.RespType {
 	}
 }
 
+func execPing(db kVStore, args[][]byte) resp.RespType {
+	if len(args) == 1 {
+		arg := args[0]
+		return &resp.BulkStr{
+			Data: arg,
+		}
+	}
+
+	if len(args) > 1 {
+		return resp.ArgNumErr("ping")
+	}
+
+	return &resp.SimpleStr{
+		Data: []byte("PONG"),
+	}
+}
+
 func execGet(db kVStore, args [][]byte) resp.RespType {
 	key := string(args[0])
 	data, ok := db.get(key)
@@ -416,11 +433,5 @@ func init() {
 	registerCommand("incrby", 3, execIncrBy)
 	registerCommand("decrby", 3, execDecrBy)
 	registerCommand("expire", -3, execExpire)
-
-	// TODO: move it to server level
-	registerCommand("ping", 1, func(db kVStore, args [][]byte) resp.RespType {
-		return &resp.SimpleStr{
-			Data: []byte("PONG"),
-		}
-	})
+	registerCommand("ping", -1, execPing)
 }
